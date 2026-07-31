@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Print Media Query for Official Reports & School Documents
+   ========================================================================== */
+@media print {
+  /* 1. Hide Sidebar, Navigation, and Floating Action Buttons */
+  header,
+  aside,
+  nav,
+  .sidebar,
+  .navbar,
+  .no-print,
+  .print\:hidden,
+  button[class*="fixed"],
+  div[class*="fixed bottom-"],
+  button[title*="المساعد الذكي"],
+  .floating-btn,
+  [class*="animate-bounce"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* 2. Reset Document & Container Layouts for Paper Printing */
+  html,
+  body,
+  #root,
+  .min-h-screen,
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    position: static !important;
+  }
+
+  /* Ensure main content area expands to full page width without sidebar offsets */
+  main {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 3. Proper Header & Footer Positioning for School Branding */
+  #printable-report-area {
+    position: relative !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    visibility: visible !important;
+    display: block !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+  }
+
+  #printable-report-area *,
+  #printable-report-content,
+  #printable-report-content * {
+    visibility: visible !important;
+  }
+
+  /* Force exact color reproduction for luxury school header, navy bars, and golden accents */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* 4. Page Break Prevention & Table Formatting */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr,
+  td,
+  th,
+  .break-inside-avoid,
+  [class*="grid-cols-"] {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 5. Clean Aesthetics for Print Media */
+  .shadow,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  /* Ensure links do not show URLs next to text unless desired */
+  a[href]:after {
+    content: none !important;
+  }
+}

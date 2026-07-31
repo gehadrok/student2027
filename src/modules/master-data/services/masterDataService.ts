@@ -1,0 +1,329 @@
+/**
+ * Master Data Service - Business Logic Layer
+ */
+import { MasterDataRepository } from '../repository/masterDataRepository';
+import {
+  MasterDataEntity,
+  MasterDataFilter,
+  PaginatedResult,
+  ImportResult,
+  ExportOptions,
+  MasterDataAuditLog,
+  ValidationError
+} from '../types';
+import { validateMasterData } from '../validators';
+import { generateId, getCurrentUserName, getCurrentUserId } from '../utils';
+
+export class MasterDataService {
+
+  /**
+   * Get paginated data for any entity type
+   */
+  getPaginated<T extends MasterDataEntity>(
+    entityType: string,
+    filter: MasterDataFilter
+  ): PaginatedResult<T> {
+    const page = filter.page || 1;
+    const pageSize = filter.pageSize || 25;
+
+    const paginated = MasterDataRepository.getAll(entityType, filter);
+    let data = paginated.data as T[];
+
+    // Search
+    if (filter.searchQuery && filter.searchQuery.trim()) {
+      const q = filter.searchQuery.toLowerCase().trim();
+      data = data.filter(item =>
+        (item.code && item.code.toLowerCase().includes(q)) ||
+        (item.name_ar && item.name_ar.toLowerCase().includes(q)) ||
+        (item.name_en && item.name_en.toLowerCase().includes(q)) ||
+        (item.description && item.description.toLowerCase().includes(q))
+      );
+    }
+
+    // Filter by active status
+    if (filter.is_active !== undefined && filter.is_active !== 'all') {
+      data = data.filter(item => item.is_active === filter.is_active);
+    }
+
+    // Sort
+    const sortBy = filter.sortBy || 'display_order';
+    const sortOrder = filter.sortOrder || 'asc';
+    data.sort((a: any, b: any) => {
+      const valA = a[sortBy] ?? '';
+      const valB = b[sortBy] ?? '';
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA);
+      const strB = String(valB);
+      return sortOrder === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+
+    const total = data.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const start = (page - 1) * pageSize;
+    const paged = data.slice(start, start + pageSize);
+
+    return {
+      data: paged,
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  /**
+   * Get all records for dropdown/lookup
+   */
+  getAll<T extends MasterDataEntity>(
+    entityType: string,
+    activeOnly: boolean = true
+  ): T[] {
+    return MasterDataRepository.getAllFlat(entityType, activeOnly) as T[];
+  }
+
+  /**
+   * Get single record by ID
+   */
+  getById<T extends MasterDataEntity>(entityType: string, id: string): T | null {
+    return MasterDataRepository.getById(entityType, id) as T | null;
+  }
+
+  /**
+   * Create a new master data record
+   */
+  create<T extends MasterDataEntity>(
+    entityType: string,
+    data: Partial<T>,
+    existingRecords: T[]
+  ): { success: boolean; errors: ValidationError[]; record?: T } {
+    // Validate
+    const validation = validateMasterData(data as any, entityType, existingRecords);
+    if (!validation.valid) {
+      return { success: false, errors: validation.errors };
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const userName = getCurrentUserName();
+    const userId = getCurrentUserId();
+
+    const record = {
+      ...data,
+      id: data.id || generateId(),
+      is_active: data.is_active ?? 1,
+      display_order: data.display_order ?? 0,
+      created_at: now,
+      updated_at: now,
+      created_by: userId,
+      updated_by: userId,
+    } as unknown as T;
+
+    MasterDataRepository.create(entityType, record as any);
+
+    // Audit log
+    this.logAudit(entityType, (record as any).id, 'CREATE', null, record, userName);
+
+    return { success: true, errors: [], record };
+  }
+
+  /**
+   * Update an existing master data record
+   */
+  update<T extends MasterDataEntity>(
+    entityType: string,
+    id: string,
+    data: Partial<T>,
+    existingRecords: T[]
+  ): { success: boolean; errors: ValidationError[]; record?: T } {
+    const current = this.getById<T>(entityType, id);
+    if (!current) {
+      return { success: false, errors: [{ field: 'id', message: 'السجل غير موجود' }] };
+    }
+
+    // Validate (exclude current record from duplicate check)
+    const validation = validateMasterData(
+      { ...current, ...data } as any,
+      entityType,
+      existingRecords,
+      id
+    );
+    if (!validation.valid) {
+      return { success: false, errors: validation.errors };
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const userName = getCurrentUserName();
+    const userId = getCurrentUserId();
+
+    const updated = {
+      ...current,
+      ...data,
+      updated_at: now,
+      updated_by: userId,
+    } as unknown as T;
+
+    MasterDataRepository.update(entityType, id, updated as any);
+
+    // Audit log
+    this.logAudit(entityType, id, 'UPDATE', current, updated, userName);
+
+    return { success: true, errors: [], record: updated };
+  }
+
+  /**
+   * Delete a master data record
+   */
+  delete(
+    entityType: string,
+    id: string
+  ): { success: boolean; error?: string } {
+    const current = this.getById(entityType, id);
+    if (!current) {
+      return { success: false, error: 'السجل غير موجود' };
+    }
+
+    MasterDataRepository.delete(entityType, id);
+
+    // Audit log
+    const userName = getCurrentUserName();
+    this.logAudit(entityType, id, 'DELETE', current, null, userName);
+
+    return { success: true };
+  }
+
+  /**
+   * Bulk delete records
+   */
+  bulkDelete(
+    entityType: string,
+    ids: string[]
+  ): { success: number; failed: number; errors: string[] } {
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    ids.forEach(id => {
+      const result = this.delete(entityType, id);
+      if (result.success) {
+        success++;
+      } else {
+        failed++;
+        errors.push(result.error || `فشل حذف ${id}`);
+      }
+    });
+
+    return { success, failed, errors };
+  }
+
+  /**
+   * Import data from Excel/CSV with transaction
+   */
+  importData<T extends MasterDataEntity>(
+    entityType: string,
+    rows: Partial<T>[]
+  ): ImportResult {
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    const existing = this.getAll<T>(entityType, false);
+
+    // For bulk imports, use transaction for better performance
+    rows.forEach((row, index) => {
+      try {
+        const result = this.create(entityType, row, existing);
+        if (result.success && result.record) {
+          success++;
+          existing.push(result.record);
+        } else {
+          failed++;
+          errors.push(`الصف ${index + 1}: ${result.errors.map(e => e.message).join('; ')}`);
+        }
+      } catch (err: any) {
+        failed++;
+        errors.push(`الصف ${index + 1}: خطأ غير متوقع - ${err.message}`);
+      }
+    });
+
+    // Audit
+    const userName = getCurrentUserName();
+    this.logAudit(entityType, 'BULK', 'IMPORT',
+      { count: rows.length },
+      { success, failed },
+      userName
+    );
+
+    return { success, failed, errors };
+  }
+
+  /**
+   * Export data
+   */
+  exportData<T extends MasterDataEntity>(
+    options: ExportOptions
+  ): { data: T[]; fileName: string } {
+    const records = this.getAll<T>(options.entityType, false);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const entityMap: Record<string, string> = {
+      academic_years: 'السنوات_الدراسية',
+      academic_terms: 'الفصول_الدراسية',
+      education_stages: 'المراحل_التعليمية',
+      grade_levels: 'الصفوف_الدراسية',
+      nationalities: 'الجنسيات',
+      countries: 'الدول',
+      governorates: 'المحافظات',
+      cities: 'المدن',
+    };
+    const fileName = `${entityMap[options.entityType] || options.entityType}_${dateStr}`;
+
+    // Audit
+    const userName = getCurrentUserName();
+    this.logAudit(options.entityType, 'ALL', 'EXPORT',
+      { format: options.format, count: records.length },
+      null,
+      userName
+    );
+
+    return { data: records, fileName };
+  }
+
+  /**
+   * Log audit trail for master data operations
+   */
+  private logAudit(
+    entityType: string,
+    entityId: string,
+    action: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'PRINT',
+    oldValues: any,
+    newValues: any,
+    performedBy: string
+  ): void {
+    try {
+      const log: MasterDataAuditLog = {
+        id: generateId(),
+        entity_type: entityType,
+        entity_id: entityId,
+        action,
+        old_values: oldValues ? JSON.stringify(oldValues) : null,
+        new_values: newValues ? JSON.stringify(newValues) : null,
+        performed_by: performedBy,
+        performed_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        ip_address: null,
+        details: null
+      };
+      MasterDataRepository.logAudit(log as any);
+    } catch (err) {
+      console.error('Failed to log audit:', err);
+    }
+  }
+
+  /**
+   * Get audit logs for a specific entity
+   */
+  getAuditLogs(entityType?: string, limit: number = 50): MasterDataAuditLog[] {
+    return MasterDataRepository.getAuditLogs(entityType, limit);
+  }
+}
+
+export const masterDataService = new MasterDataService();
+
