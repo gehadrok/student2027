@@ -1,7 +1,7 @@
 /**
  * Master Data Service - Business Logic Layer
  */
-import { MasterDataRepository } from '../repository/masterDataRepository';
+import { masterDataRepository } from '../repository/masterDataRepository';
 import {
   MasterDataEntity,
   MasterDataFilter,
@@ -26,7 +26,7 @@ export class MasterDataService {
     const page = filter.page || 1;
     const pageSize = filter.pageSize || 25;
 
-    const paginated = MasterDataRepository.getAll(entityType, filter);
+    const paginated = masterDataRepository.getAll(entityType, filter);
     let data = paginated.data as T[];
 
     // Search
@@ -80,14 +80,14 @@ export class MasterDataService {
     entityType: string,
     activeOnly: boolean = true
   ): T[] {
-    return MasterDataRepository.getAllFlat(entityType, activeOnly) as T[];
+    return masterDataRepository.getAllFlat(entityType, activeOnly) as T[];
   }
 
   /**
    * Get single record by ID
    */
   getById<T extends MasterDataEntity>(entityType: string, id: string): T | null {
-    return MasterDataRepository.getById(entityType, id) as T | null;
+    return masterDataRepository.getById(entityType, id) as T | null;
   }
 
   /**
@@ -119,7 +119,7 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    MasterDataRepository.create(entityType, record as any);
+    masterDataRepository.create(entityType, record as any);
 
     // Audit log
     this.logAudit(entityType, (record as any).id, 'CREATE', null, record, userName);
@@ -163,7 +163,7 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    MasterDataRepository.update(entityType, id, updated as any);
+    masterDataRepository.update(entityType, id, updated as any);
 
     // Audit log
     this.logAudit(entityType, id, 'UPDATE', current, updated, userName);
@@ -183,7 +183,7 @@ export class MasterDataService {
       return { success: false, error: 'السجل غير موجود' };
     }
 
-    MasterDataRepository.delete(entityType, id);
+    masterDataRepository.delete(entityType, id);
 
     // Audit log
     const userName = getCurrentUserName();
@@ -311,7 +311,7 @@ export class MasterDataService {
         ip_address: null,
         details: null
       };
-      MasterDataRepository.logAudit(log as any);
+      masterDataRepository.logAudit(log as any);
     } catch (err) {
       console.error('Failed to log audit:', err);
     }
@@ -321,7 +321,7 @@ export class MasterDataService {
    * Get audit logs for a specific entity
    */
   getAuditLogs(entityType?: string, limit: number = 50): MasterDataAuditLog[] {
-    return MasterDataRepository.getAuditLogs(entityType, limit);
+    return masterDataRepository.getAuditLogs(entityType, limit);
   }
 }
 

@@ -1,4 +1,5 @@
 
+import React, { useState } from 'react';
 import { AttendanceRecord, AttendanceStatus, AppNotification } from '../types';
 import { getRealmDB, saveRealmDB, addAuditLog, getCurrentUser } from '../lib/db';
 import { UserCheck, Calendar, Search, CheckCircle2, XCircle, Clock, AlertCircle, Check, Send, Filter, Bell } from 'lucide-react';

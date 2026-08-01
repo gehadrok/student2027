@@ -24,6 +24,14 @@ import { HashService } from '../security/HashService';
 import { TokenService } from '../security/TokenService';
 import { SessionService } from '../security/SessionService';
 import { DataSourceFactory } from '../datasource/DataSourceFactory';
+import { AuthService } from '../auth/AuthService';
+import { ConfigurationError } from '../errors/AppError';
+import { studentRepository } from '../../modules/students/repository/studentRepository';
+import { teacherRepository } from '../../modules/teachers/repository/teacherRepository';
+import { financialRepository } from '../../modules/financial/repository/financialRepository';
+import { masterDataRepository } from '../../modules/master-data/repository/masterDataRepository';
+import { dashboardRepository } from '../../modules/dashboard/repository/dashboardRepository';
+import { dashboardService } from '../../modules/dashboard/services/dashboardService';
 
 /**
  * Service identifiers for DI Container resolution.
@@ -42,11 +50,12 @@ export const SERVICE_IDS = {
   // Data
   DataSource: 'core.DataSource',
 
-  // Security
+  // Security & Auth
   Encryption: 'core.Encryption',
   Hash: 'core.Hash',
   Token: 'core.Token',
   Session: 'core.Session',
+  Auth: 'core.Auth',
 
   // Repositories
   StudentRepository: 'modules.StudentRepository',
@@ -61,11 +70,19 @@ export const SERVICE_IDS = {
 
 const logger = LoggerFactory.getInstance('Bootstrap');
 
+let initialized = false;
+
 /**
  * Initialize all infrastructure services.
- * Must be called once at application startup.
+ * Must be called once at application startup before the App renders.
+ * Fails fast if any mandatory registration is missing after wiring.
  */
 export function initializeInfrastructure(): void {
+  if (initialized) {
+    logger.warn('initializeInfrastructure() called more than once. Skipping duplicate initialization.');
+    return;
+  }
+
   const container = Container.getInstance();
 
   logger.info('Initializing infrastructure...');
@@ -118,6 +135,30 @@ export function initializeInfrastructure(): void {
   const dataSource = DataSourceFactory.getInstance();
   container.registerInstance(SERVICE_IDS.DataSource, dataSource);
 
+  // ── 11. Auth ─────────────────────────────────────────────────────────────
+  const auth = new AuthService(dataSource, hash, token);
+  container.registerInstance(SERVICE_IDS.Auth, auth);
+
+  // ── 12. Repositories ─────────────────────────────────────────────────────
+  container.registerInstance(SERVICE_IDS.StudentRepository, studentRepository);
+  container.registerInstance(SERVICE_IDS.TeacherRepository, teacherRepository);
+  container.registerInstance(SERVICE_IDS.FinancialRepository, financialRepository);
+  container.registerInstance(SERVICE_IDS.MasterDataRepository, masterDataRepository);
+  container.registerInstance(SERVICE_IDS.DashboardRepository, dashboardRepository);
+
+  // ── 13. Dashboard Service ────────────────────────────────────────────────
+  container.registerInstance(SERVICE_IDS.DashboardService, dashboardService);
+
+  // ── Mandatory registration audit (fail fast) ─────────────────────────────
+  const mandatoryServiceIds = Object.values(SERVICE_IDS);
+  const missing = mandatoryServiceIds.filter((id) => !container.has(id));
+  if (missing.length > 0) {
+    throw new ConfigurationError(
+      `Mandatory service registrations are missing: ${missing.join(', ')}`
+    );
+  }
+
+  initialized = true;
   logger.info(`Infrastructure initialized. Registered ${container.getRegisteredServices().length} services.`);
 }
 

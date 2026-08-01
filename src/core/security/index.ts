@@ -7,4 +7,5 @@ export { EncryptionService } from './EncryptionService';
 export { HashService } from './HashService';
 export { TokenService } from './TokenService';
 export { SessionService } from './SessionService';
-export type { TokenPayload, Session } from './TokenService';
+export type { TokenPayload } from './TokenService';
+export type { Session } from './SessionService';

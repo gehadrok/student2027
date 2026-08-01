@@ -121,7 +121,7 @@ export function useMasterData<T extends MasterDataEntity>(
   }, [entityType, fetchData]);
 
   const handleBulkDelete = useCallback(() => {
-    const ids = Array.from(selectedIds);
+    const ids: string[] = Array.from(selectedIds);
     if (ids.length === 0) return { success: 0, failed: 0, errors: [] };
     const result = masterDataService.bulkDelete(entityType, ids);
     setSelectedIds(new Set());
