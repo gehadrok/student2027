@@ -3,7 +3,8 @@ import { UserRole } from '../types';
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar, CalendarDays,
   UserCheck, Award, DollarSign, PieChart, Settings, Bell, Sparkles,
-  ChevronRight, ChevronLeft, Layers, FileText, Library, FolderArchive, Database
+  ChevronRight, ChevronLeft, Layers, FileText, Library, FolderArchive, Database,
+  School
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -44,6 +45,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'master-data',
       label: 'مركز البيانات الأساسية',
       icon: <Database className="w-5 h-5" />,
+      roles: ['admin'],
+      badge: 'جديد'
+    },
+    {
+      id: 'academic',
+      label: 'المركز الأكاديمي',
+      icon: <School className="w-5 h-5" />,
       roles: ['admin'],
       badge: 'جديد'
     },

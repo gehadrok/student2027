@@ -99,32 +99,44 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 -- 7. SUBJECTS (المواد الدراسية)
+-- NOTE (Academic runtime persistence alignment): `name`/`code` relaxed to be
+-- nullable and `code` de-uniqued so the CourseAssignment repository can insert
+-- rows with only (id, subject_id, teacher_id, class_id, weekly_hours). Additive
+-- columns `subject_id` and `updated_at` support CourseAssignment persistence.
 CREATE TABLE IF NOT EXISTS subjects (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    code TEXT NOT NULL UNIQUE,
+    name TEXT,
+    code TEXT,
     class_id TEXT NOT NULL,
     teacher_id TEXT NOT NULL,
     weekly_hours INTEGER NOT NULL DEFAULT 3 CHECK(weekly_hours > 0),
     max_score REAL NOT NULL DEFAULT 100.0 CHECK(max_score > 0),
     pass_score REAL NOT NULL DEFAULT 50.0 CHECK(pass_score >= 0 AND pass_score <= max_score),
     color TEXT,
+    subject_id TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES school_classes(id) ON DELETE CASCADE,
     FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT
 );
 
 -- 8. TIMETABLE SCHEDULE PERIODS (الجداول الحصصية)
+-- NOTE (Academic runtime persistence alignment): `day` CHECK relaxed to accept
+-- both legacy Arabic weekday tokens and ISO calendar dates (used by the
+-- Academic calendar repository). Additive columns `academic_week` and
+-- `updated_at` support Academic calendar persistence.
 CREATE TABLE IF NOT EXISTS schedule_periods (
     id TEXT PRIMARY KEY,
     class_id TEXT NOT NULL,
     section_id TEXT NOT NULL,
     subject_id TEXT NOT NULL,
     teacher_id TEXT NOT NULL,
-    day TEXT NOT NULL CHECK(day IN ('الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس')),
+    day TEXT NOT NULL,
     period_number INTEGER NOT NULL CHECK(period_number BETWEEN 1 AND 7),
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
+    academic_week INTEGER DEFAULT 1,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES school_classes(id) ON DELETE CASCADE,
     FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE,
     FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
@@ -339,9 +351,77 @@ CREATE TABLE IF NOT EXISTS user_linked_students (
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
+-- 21. ACADEMIC YEARS (السنوات الدراسية)
+-- NOTE (Academic runtime persistence alignment): added to the canonical runtime
+-- schema so the AcademicYear repository can persist and reconstruct aggregates.
+CREATE TABLE IF NOT EXISTS academic_years (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL,
+    name_en TEXT,
+    description TEXT,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    is_current INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    updated_by TEXT
+);
+
+-- 22. ACADEMIC TERMS (الفصول الدراسية)
+CREATE TABLE IF NOT EXISTS academic_terms (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL,
+    name_en TEXT,
+    description TEXT,
+    academic_year_id TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    is_current INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    updated_by TEXT,
+    FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE
+);
+
+-- 23. SUBJECTS MASTER (المواد الدراسية - master data version)
+-- NOTE (Academic runtime persistence alignment): used by the Curriculum
+-- repository. `grade_level_id` is a plain column (no FK) to avoid pulling in
+-- grade_levels/education_stages tables that are not part of the runtime schema.
+CREATE TABLE IF NOT EXISTS subjects_master (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL,
+    name_en TEXT,
+    description TEXT,
+    grade_level_id TEXT,
+    weekly_hours INTEGER DEFAULT 3,
+    max_score REAL DEFAULT 100,
+    pass_score REAL DEFAULT 50,
+    is_active INTEGER DEFAULT 1,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    updated_by TEXT
+);
+
 -- ============================================================================
 -- PERFORMANCE INDEXES (25+ INDEXES)
 -- ============================================================================
+CREATE INDEX IF NOT EXISTS idx_academic_years_code ON academic_years(code);
+CREATE INDEX IF NOT EXISTS idx_academic_years_is_active ON academic_years(is_active);
+CREATE INDEX IF NOT EXISTS idx_academic_terms_year ON academic_terms(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_academic_terms_code ON academic_terms(code);
+CREATE INDEX IF NOT EXISTS idx_subjects_master_code ON subjects_master(code);
+CREATE INDEX IF NOT EXISTS idx_subjects_master_is_active ON subjects_master(is_active);
 CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
 CREATE INDEX IF NOT EXISTS idx_teachers_user_id ON teachers(user_id);
 CREATE INDEX IF NOT EXISTS idx_parents_user_id ON parents(user_id);

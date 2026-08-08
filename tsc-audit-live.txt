@@ -1,0 +1,11 @@
+src/App.tsx(82,13): error TS2741: Property 'settings' is missing in type '{ onLoginSuccess: (user: User) => void; }' but required in type 'LoginScreenProps'.
+src/App.tsx(148,8): error TS2741: Property 'settings' is missing in type '{ currentUser: User; unreadNotifsCount: number; onLogout: () => void; onOpenNotifications: () => void; onOpenAI: () => void; onSwitchUserModal: () => void; onToggleSidebar: () => void; onNavigate: (tab: string) => void; }' but required in type 'NavbarProps'.
+src/components/ActiveReportPrintView.tsx(305,7): error TS2367: This comparison appears to be unintentional because the types '"library" | "users" | "academic" | "financial" | "certificates" | "audit" | "inventory" | "reports_center" | "saved_history" | "kpi_dashboard" | "transport" | "maintenance"' and '"grades"' have no overlap.
+src/components/GlobalSearchBar.tsx(300,48): error TS2345: Argument of type '"student"' is not assignable to parameter of type 'SetStateAction<SearchCategory>'.
+src/components/GlobalSearchBar.tsx(302,17): error TS2367: This comparison appears to be unintentional because the types 'SearchCategory' and '"student"' have no overlap.
+src/components/GlobalSearchBar.tsx(308,48): error TS2345: Argument of type '"teacher"' is not assignable to parameter of type 'SetStateAction<SearchCategory>'.
+src/components/GlobalSearchBar.tsx(310,17): error TS2367: This comparison appears to be unintentional because the types 'SearchCategory' and '"teacher"' have no overlap.
+src/components/GlobalSearchBar.tsx(316,48): error TS2345: Argument of type '"subject"' is not assignable to parameter of type 'SetStateAction<SearchCategory>'.
+src/components/GlobalSearchBar.tsx(318,17): error TS2367: This comparison appears to be unintentional because the types 'SearchCategory' and '"subject"' have no overlap.
+src/components/GlobalSearchBar.tsx(324,48): error TS2345: Argument of type '"class"' is not assignable to parameter of type 'SetStateAction<SearchCategory>'.
+src/components/GlobalSearchBar.tsx(326,17): error TS2367: This comparison appears to be unintentional because the types 'SearchCategory' and '"class"' have no overlap.

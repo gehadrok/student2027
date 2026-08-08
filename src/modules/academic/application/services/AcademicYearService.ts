@@ -1,0 +1,155 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Phase 6.0 — Academic Application Layer.
+ *
+ * AcademicYearService orchestrates the AcademicYear aggregate lifecycle.
+ * It translates command DTOs into Domain objects, delegates to the repository
+ * (which owns UnitOfWork + EventBus dispatch), and returns response DTOs.
+ * No business rules live here — they are enforced by the Domain aggregate.
+ */
+
+import { IAcademicYearRepository } from '../../domain/repositories/IAcademicYearRepository';
+import { AcademicYear } from '../../domain/aggregates/AcademicYear';
+import { AcademicTerm } from '../../domain/entities/AcademicTerm';
+import { AcademicYearId } from '../../domain/value-objects/AcademicYearId';
+import { AcademicYearCode } from '../../domain/value-objects/AcademicYearCode';
+import { AcademicTermId } from '../../domain/value-objects/AcademicTermId';
+import { AcademicTermCode } from '../../domain/value-objects/AcademicTermCode';
+import { SchoolScopeId } from '../../domain/value-objects/SchoolScopeId';
+import { DateRange } from '../../domain/value-objects/DateRange';
+import {
+  CreateAcademicYearCommand,
+  AddAcademicTermCommand,
+  ApproveAcademicYearCommand,
+  ActivateAcademicYearCommand,
+  CloseAcademicYearCommand,
+  ArchiveAcademicYearCommand,
+  OpenTermCommand,
+  LockTermCommand,
+  CloseTermCommand,
+  DeleteAcademicYearCommand,
+} from '../commands';
+import {
+  GetAcademicYearByIdQuery,
+  GetAcademicYearByCodeQuery,
+  ListAcademicYearsQuery,
+} from '../queries';
+import { AcademicYearDto, AcademicYearSummaryDto } from '../dtos';
+import { academicYearToDto, academicYearToSummaryDto } from '../mappers';
+
+function requireYear(year: AcademicYear | null, id: string): AcademicYear {
+  if (!year) {
+    throw new Error(`AcademicYear not found: ${id}`);
+  }
+  return year;
+}
+
+export class AcademicYearService {
+  constructor(private readonly repo: IAcademicYearRepository) {}
+
+  // ── Commands ─────────────────────────────────────────────────────────────
+
+  create(command: CreateAcademicYearCommand): AcademicYearDto {
+    const year = AcademicYear.create({
+      id: new AcademicYearId(command.id),
+      code: new AcademicYearCode(command.code),
+      schoolScopeId: new SchoolScopeId(command.schoolScopeId),
+      dateRange: new DateRange({
+        startDate: new Date(command.startDate),
+        endDate: new Date(command.endDate),
+      }),
+      createdBy: command.createdBy,
+      ministryReferenceCode: command.ministryReferenceCode,
+    });
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), year.id.toString()));
+  }
+
+  addTerm(command: AddAcademicTermCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    const term = new AcademicTerm({
+      id: new AcademicTermId(command.id),
+      code: new AcademicTermCode(command.code),
+      dateRange: new DateRange({
+        startDate: new Date(command.startDate),
+        endDate: new Date(command.endDate),
+      }),
+    });
+    year.addTerm(term, command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  approve(command: ApproveAcademicYearCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.approve(command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  activate(command: ActivateAcademicYearCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.activate(command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  close(command: CloseAcademicYearCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.close(command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  archive(command: ArchiveAcademicYearCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.archive(command.reason, command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  openTerm(command: OpenTermCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.openTerm(new AcademicTermId(command.termId), command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  lockTerm(command: LockTermCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.lockTerm(new AcademicTermId(command.termId), command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  closeTerm(command: CloseTermCommand): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+    year.closeTerm(new AcademicTermId(command.termId), command.changedBy);
+    this.repo.save(year);
+    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+  }
+
+  delete(command: DeleteAcademicYearCommand): boolean {
+    return this.repo.delete(new AcademicYearId(command.academicYearId));
+  }
+
+  // ── Queries ──────────────────────────────────────────────────────────────
+
+  getById(query: GetAcademicYearByIdQuery): AcademicYearDto {
+    const year = requireYear(this.repo.findById(new AcademicYearId(query.id)), query.id);
+    return academicYearToDto(year);
+  }
+
+  getByCode(query: GetAcademicYearByCodeQuery): AcademicYearDto {
+    const year = requireYear(this.repo.findByCode(new AcademicYearCode(query.code)), query.code);
+    return academicYearToDto(year);
+  }
+
+  list(query: ListAcademicYearsQuery): AcademicYearSummaryDto[] {
+    const years = this.repo.getAll();
+    const filtered = query.status ? years.filter((y) => y.status === query.status) : years;
+    return filtered.map(academicYearToSummaryDto);
+  }
+}

@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { createAcademicRouter } from "./src/modules/academic/api/academicRoutes";
 
 dotenv.config();
 
@@ -10,6 +11,9 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// Academic REST API
+app.use("/api", createAcademicRouter());
 
 // Helper function to get Gemini client lazily
 function getAIClient() {

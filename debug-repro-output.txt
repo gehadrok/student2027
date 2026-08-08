@@ -1,0 +1,6 @@
+CREATE OK, dto.id = app-ay-2 status = draft
+academic_years table rows:
+  key= "app-ay-2" row= {"id":"app-ay-2","code":"2025-2026","name_ar":"2025-2026","name_en":"2025-2026","description":"draft","start_date":"2025-09-01","end_date":"2026-06-30","is_current":0,"is_active":1,"display_order":0}
+DIRECT findById OK, status = draft startDate = 2025-09-01T00:00:00.000Z
+ADDTERM FAILED: DateRange requires valid start and end dates.
+DONE

@@ -32,6 +32,14 @@ import { financialRepository } from '../../modules/financial/repository/financia
 import { masterDataRepository } from '../../modules/master-data/repository/masterDataRepository';
 import { dashboardRepository } from '../../modules/dashboard/repository/dashboardRepository';
 import { dashboardService } from '../../modules/dashboard/services/dashboardService';
+import { SQLiteAcademicYearRepository } from '../../modules/academic/infrastructure/repositories/SQLiteAcademicYearRepository';
+import { SQLiteCurriculumRepository } from '../../modules/academic/infrastructure/repositories/SQLiteCurriculumRepository';
+import { SQLiteCourseAssignmentRepository } from '../../modules/academic/infrastructure/repositories/SQLiteCourseAssignmentRepository';
+import { SQLiteAcademicCalendarRepository } from '../../modules/academic/infrastructure/repositories/SQLiteAcademicCalendarRepository';
+import { AcademicYearService } from '../../modules/academic/application/services/AcademicYearService';
+import { CurriculumService } from '../../modules/academic/application/services/CurriculumService';
+import { CourseAssignmentService } from '../../modules/academic/application/services/CourseAssignmentService';
+import { AcademicCalendarService } from '../../modules/academic/application/services/AcademicCalendarService';
 
 /**
  * Service identifiers for DI Container resolution.
@@ -60,12 +68,24 @@ export const SERVICE_IDS = {
   // Repositories
   StudentRepository: 'modules.StudentRepository',
   TeacherRepository: 'modules.TeacherRepository',
-  FinancialRepository: 'modules.FinancialRepository',
+FinancialRepository: 'modules.FinancialRepository',
   MasterDataRepository: 'modules.MasterDataRepository',
   DashboardRepository: 'modules.DashboardRepository',
 
-  // Services
+  // Academic Repositories
+  AcademicYearRepository: 'modules.AcademicYearRepository',
+  CurriculumRepository: 'modules.CurriculumRepository',
+  CourseAssignmentRepository: 'modules.CourseAssignmentRepository',
+  AcademicCalendarRepository: 'modules.AcademicCalendarRepository',
+
+// Services
   DashboardService: 'modules.DashboardService',
+
+  // Academic Application Services
+  AcademicYearService: 'modules.academic.AcademicYearService',
+  CurriculumService: 'modules.academic.CurriculumService',
+  CourseAssignmentService: 'modules.academic.CourseAssignmentService',
+  AcademicCalendarService: 'modules.academic.AcademicCalendarService',
 } as const;
 
 const logger = LoggerFactory.getInstance('Bootstrap');
@@ -144,10 +164,46 @@ export function initializeInfrastructure(): void {
   container.registerInstance(SERVICE_IDS.TeacherRepository, teacherRepository);
   container.registerInstance(SERVICE_IDS.FinancialRepository, financialRepository);
   container.registerInstance(SERVICE_IDS.MasterDataRepository, masterDataRepository);
-  container.registerInstance(SERVICE_IDS.DashboardRepository, dashboardRepository);
+container.registerInstance(SERVICE_IDS.DashboardRepository, dashboardRepository);
 
-  // ── 13. Dashboard Service ────────────────────────────────────────────────
+  // ── 12b. Academic Repositories ───────────────────────────────────────────
+  container.registerInstance(
+    SERVICE_IDS.AcademicYearRepository,
+    new SQLiteAcademicYearRepository(dataSource)
+  );
+  container.registerInstance(
+    SERVICE_IDS.CurriculumRepository,
+    new SQLiteCurriculumRepository(dataSource)
+  );
+  container.registerInstance(
+    SERVICE_IDS.CourseAssignmentRepository,
+    new SQLiteCourseAssignmentRepository(dataSource)
+  );
+  container.registerInstance(
+    SERVICE_IDS.AcademicCalendarRepository,
+    new SQLiteAcademicCalendarRepository(dataSource)
+  );
+
+// ── 13. Dashboard Service ────────────────────────────────────────────────
   container.registerInstance(SERVICE_IDS.DashboardService, dashboardService);
+
+  // ── 14. Academic Application Services ────────────────────────────────────
+  container.registerInstance(
+    SERVICE_IDS.AcademicYearService,
+    new AcademicYearService(new SQLiteAcademicYearRepository(dataSource))
+  );
+  container.registerInstance(
+    SERVICE_IDS.CurriculumService,
+    new CurriculumService(new SQLiteCurriculumRepository(dataSource))
+  );
+  container.registerInstance(
+    SERVICE_IDS.CourseAssignmentService,
+    new CourseAssignmentService(new SQLiteCourseAssignmentRepository(dataSource))
+  );
+  container.registerInstance(
+    SERVICE_IDS.AcademicCalendarService,
+    new AcademicCalendarService(new SQLiteAcademicCalendarRepository(dataSource))
+  );
 
   // ── Mandatory registration audit (fail fast) ─────────────────────────────
   const mandatoryServiceIds = Object.values(SERVICE_IDS);

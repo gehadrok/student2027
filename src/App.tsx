@@ -33,6 +33,7 @@ import { DocumentCenterScreen } from './screens/DocumentCenterScreen';
 import { AIInsightsScreen } from './screens/AIInsightsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { MasterDataCenter } from './modules/master-data/screens/MasterDataCenter';
+import { AcademicCenter } from './modules/academic/presentation/screens/AcademicCenter';
 import { ToastProvider } from './components/common/ToastContext';
 import { ReferenceDataProvider } from './lib/reference-data';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -134,6 +135,8 @@ function AppContent() {
         return <SettingsScreen onNavigate={setActiveTab} />;
       case 'master-data':
         return <MasterDataCenter />;
+      case 'academic':
+        return <AcademicCenter />;
       default:
         return renderDashboardByRole();
     }
@@ -201,4 +204,3 @@ export default function App() {
     </ToastProvider>
   );
 }
-
