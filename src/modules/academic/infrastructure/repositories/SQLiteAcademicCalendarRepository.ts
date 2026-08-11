@@ -9,9 +9,10 @@ import { academicCalendarRecordToRow, academicCalendarRowToRecord, AcademicCalen
 
 /**
  * SQLite-backed implementation of IAcademicCalendarRepository.
- * Maps academic calendar school days onto the existing schedule_periods.day column.
- * Writes are executed inside a UnitOfWork for transaction support.
- * NOTE: full calendar persistence requires a dedicated table (future migration).
+ * Persists academic calendar school days onto the dedicated
+ * `academic_calendar_days` table (day = ISO calendar date, academic_week,
+ * is_instructional). New records are INSERTed; existing records (by id) are
+ * UPDATEed, both inside a UnitOfWork transaction.
  */
 export class SQLiteAcademicCalendarRepository implements IAcademicCalendarRepository {
   private readonly dataSource: IDataSource;
@@ -22,65 +23,72 @@ export class SQLiteAcademicCalendarRepository implements IAcademicCalendarReposi
     this.unitOfWork = unitOfWork || new UnitOfWork(this.dataSource);
   }
 
-  save(record: AcademicCalendarRecord): AcademicCalendarRecord | null {
+  async save(record: AcademicCalendarRecord): Promise<AcademicCalendarRecord | null> {
     const row = academicCalendarRecordToRow(record);
-    const existing = this.dataSource.exists(
-      "SELECT 1 FROM schedule_periods WHERE day = ?",
-      [row.day]
+    const existing = await this.dataSource.exists(
+      'SELECT 1 FROM academic_calendar_days WHERE id = ?',
+      [row.id]
     );
 
     if (existing) {
       this.unitOfWork.register(
-        'UPDATE schedule_periods SET day = ?, updated_at = CURRENT_TIMESTAMP WHERE day = ?',
-        [row.day, row.day]
+        `UPDATE academic_calendar_days
+         SET day = ?, academic_week = ?, is_instructional = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [row.day, row.academic_week, row.is_instructional ?? 1, row.id]
       );
-      const result = this.unitOfWork.commit();
-      if (!result.success) {
-        throw new Error(`AcademicCalendar save failed: ${result.error || 'unknown'}`);
-      }
     } else {
-      // No-op insert: schedule_periods requires FK dependencies. We persist the
-      // day marker only if possible; otherwise the record is tracked ephemerally.
-      void row;
+      this.unitOfWork.register(
+        `INSERT INTO academic_calendar_days
+         (id, day, academic_week, is_instructional, created_at, updated_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [row.id, row.day, row.academic_week, row.is_instructional ?? 1]
+      );
     }
 
-    return this.findByDate(new AcademicCalendarDate(new Date(`${record.date}T00:00:00Z`)));
+    const result = await this.unitOfWork.commit();
+    if (!result.success) {
+      throw new Error(`AcademicCalendar save failed: ${result.error || 'unknown'}`);
+    }
+
+    return this.findById(new SchoolDayId(record.id));
   }
 
-  findById(id: SchoolDayId): AcademicCalendarRecord | null {
-    const row = this.dataSource.queryOne<AcademicCalendarRow>(
-      'SELECT * FROM schedule_periods WHERE id = ?',
+  async findById(id: SchoolDayId): Promise<AcademicCalendarRecord | null> {
+    const row = await this.dataSource.queryOne<AcademicCalendarRow>(
+      'SELECT * FROM academic_calendar_days WHERE id = ?',
       [id.toString()]
     );
     return row ? academicCalendarRowToRecord(row) : null;
   }
 
-  findByDate(date: AcademicCalendarDate): AcademicCalendarRecord | null {
-    const row = this.dataSource.queryOne<AcademicCalendarRow>(
-      'SELECT * FROM schedule_periods WHERE day = ?',
+  async findByDate(date: AcademicCalendarDate): Promise<AcademicCalendarRecord | null> {
+    const row = await this.dataSource.queryOne<AcademicCalendarRow>(
+      'SELECT * FROM academic_calendar_days WHERE day = ?',
       [date.isoDate]
     );
     return row ? academicCalendarRowToRecord(row) : null;
   }
 
-  getByWeek(week: AcademicWeek): AcademicCalendarRecord[] {
-    return this.dataSource
-      .query<AcademicCalendarRow>(
-        'SELECT * FROM schedule_periods WHERE academic_week = ?',
-        [week.value]
-      )
-      .map(academicCalendarRowToRecord);
+  async getByWeek(week: AcademicWeek): Promise<AcademicCalendarRecord[]> {
+    const rows = await this.dataSource.query<AcademicCalendarRow>(
+      'SELECT * FROM academic_calendar_days WHERE academic_week = ?',
+      [week.value]
+    );
+    return rows.map(academicCalendarRowToRecord);
   }
 
-  getAll(): AcademicCalendarRecord[] {
-    return this.dataSource
-      .query<AcademicCalendarRow>('SELECT * FROM schedule_periods')
-      .map(academicCalendarRowToRecord);
+  async getAll(): Promise<AcademicCalendarRecord[]> {
+    const rows = await this.dataSource.query<AcademicCalendarRow>(
+      'SELECT * FROM academic_calendar_days ORDER BY day ASC'
+    );
+    return rows.map(academicCalendarRowToRecord);
   }
 
-  delete(id: SchoolDayId): boolean {
-    const result = this.dataSource.execute(
-      'DELETE FROM schedule_periods WHERE id = ?',
+  async delete(id: SchoolDayId): Promise<boolean> {
+    const result = await this.dataSource.execute(
+      'DELETE FROM academic_calendar_days WHERE id = ?',
       [id.toString()]
     );
     return result.changes > 0;

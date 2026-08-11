@@ -20,8 +20,8 @@ export class StudentRepository implements IStudentRepository {
     this.dataSource = dataSource || DataSourceFactory.getInstance();
   }
 
-  getAll(): Student[] {
-    const rows = this.dataSource.query<any>(
+  async getAll(): Promise<Student[]> {
+    const rows = await this.dataSource.query<any>(
       `SELECT id, user_id, academic_id, name, class_id, section_id, parent_id, parent_name,
               parent_phone, birth_date, gender, photo, status, health_notes, enrollment_date
        FROM students ORDER BY name ASC`
@@ -46,8 +46,8 @@ export class StudentRepository implements IStudentRepository {
     }));
   }
 
-  getById(id: string): Student | undefined {
-    const row = this.dataSource.queryOne<any>(
+  async getById(id: string): Promise<Student | undefined> {
+    const row = await this.dataSource.queryOne<any>(
       `SELECT id, user_id, academic_id, name, class_id, section_id, parent_id, parent_name,
               parent_phone, birth_date, gender, photo, status, health_notes, enrollment_date
        FROM students WHERE id = ?`,
@@ -74,8 +74,8 @@ export class StudentRepository implements IStudentRepository {
     };
   }
 
-  getByClass(classId: string): Student[] {
-    const rows = this.dataSource.query<any>(
+  async getByClass(classId: string): Promise<Student[]> {
+    const rows = await this.dataSource.query<any>(
       `SELECT id, user_id, academic_id, name, class_id, section_id, parent_id, parent_name,
               parent_phone, birth_date, gender, photo, status, health_notes, enrollment_date
        FROM students WHERE class_id = ? ORDER BY name ASC`,
@@ -101,8 +101,8 @@ export class StudentRepository implements IStudentRepository {
     }));
   }
 
-  save(student: Student): Student {
-    this.dataSource.execute(
+  async save(student: Student): Promise<Student> {
+    await this.dataSource.execute(
       `INSERT OR REPLACE INTO students (
         id, user_id, academic_id, name, class_id, section_id, parent_id, parent_name,
         parent_phone, birth_date, gender, photo, status, health_notes, enrollment_date
@@ -128,7 +128,7 @@ export class StudentRepository implements IStudentRepository {
 
     // Also pair in parent_students
     if (student.parentId && student.id) {
-      this.dataSource.execute(
+      await this.dataSource.execute(
         'INSERT OR IGNORE INTO parent_students (parent_id, student_id) VALUES (?, ?)',
         [student.parentId, student.id]
       );
@@ -137,8 +137,8 @@ export class StudentRepository implements IStudentRepository {
     return student;
   }
 
-  delete(id: string): boolean {
-    const result = this.dataSource.execute('DELETE FROM students WHERE id = ?', [id]);
+  async delete(id: string): Promise<boolean> {
+    const result = await this.dataSource.execute('DELETE FROM students WHERE id = ?', [id]);
     return result.changes > 0;
   }
 }

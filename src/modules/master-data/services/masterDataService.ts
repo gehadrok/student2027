@@ -19,14 +19,14 @@ export class MasterDataService {
   /**
    * Get paginated data for any entity type
    */
-  getPaginated<T extends MasterDataEntity>(
+  async getPaginated<T extends MasterDataEntity>(
     entityType: string,
     filter: MasterDataFilter
-  ): PaginatedResult<T> {
+  ): Promise<PaginatedResult<T>> {
     const page = filter.page || 1;
     const pageSize = filter.pageSize || 25;
 
-    const paginated = masterDataRepository.getAll(entityType, filter);
+    const paginated = await masterDataRepository.getAll(entityType, filter);
     let data = paginated.data as T[];
 
     // Search
@@ -76,28 +76,28 @@ export class MasterDataService {
   /**
    * Get all records for dropdown/lookup
    */
-  getAll<T extends MasterDataEntity>(
+  async getAll<T extends MasterDataEntity>(
     entityType: string,
     activeOnly: boolean = true
-  ): T[] {
-    return masterDataRepository.getAllFlat(entityType, activeOnly) as T[];
+  ): Promise<T[]> {
+    return (await masterDataRepository.getAllFlat(entityType, activeOnly)) as T[];
   }
 
   /**
    * Get single record by ID
    */
-  getById<T extends MasterDataEntity>(entityType: string, id: string): T | null {
-    return masterDataRepository.getById(entityType, id) as T | null;
+  async getById<T extends MasterDataEntity>(entityType: string, id: string): Promise<T | null> {
+    return (await masterDataRepository.getById(entityType, id)) as T | null;
   }
 
   /**
    * Create a new master data record
    */
-  create<T extends MasterDataEntity>(
+  async create<T extends MasterDataEntity>(
     entityType: string,
     data: Partial<T>,
     existingRecords: T[]
-  ): { success: boolean; errors: ValidationError[]; record?: T } {
+  ): Promise<{ success: boolean; errors: ValidationError[]; record?: T }> {
     // Validate
     const validation = validateMasterData(data as any, entityType, existingRecords);
     if (!validation.valid) {
@@ -119,10 +119,10 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    masterDataRepository.create(entityType, record as any);
+    await masterDataRepository.create(entityType, record as any);
 
     // Audit log
-    this.logAudit(entityType, (record as any).id, 'CREATE', null, record, userName);
+    await this.logAudit(entityType, (record as any).id, 'CREATE', null, record, userName);
 
     return { success: true, errors: [], record };
   }
@@ -130,13 +130,13 @@ export class MasterDataService {
   /**
    * Update an existing master data record
    */
-  update<T extends MasterDataEntity>(
+  async update<T extends MasterDataEntity>(
     entityType: string,
     id: string,
     data: Partial<T>,
     existingRecords: T[]
-  ): { success: boolean; errors: ValidationError[]; record?: T } {
-    const current = this.getById<T>(entityType, id);
+  ): Promise<{ success: boolean; errors: ValidationError[]; record?: T }> {
+    const current = await this.getById<T>(entityType, id);
     if (!current) {
       return { success: false, errors: [{ field: 'id', message: 'السجل غير موجود' }] };
     }
@@ -163,10 +163,10 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    masterDataRepository.update(entityType, id, updated as any);
+    await masterDataRepository.update(entityType, id, updated as any);
 
     // Audit log
-    this.logAudit(entityType, id, 'UPDATE', current, updated, userName);
+    await this.logAudit(entityType, id, 'UPDATE', current, updated, userName);
 
     return { success: true, errors: [], record: updated };
   }
@@ -174,20 +174,20 @@ export class MasterDataService {
   /**
    * Delete a master data record
    */
-  delete(
+  async delete(
     entityType: string,
     id: string
-  ): { success: boolean; error?: string } {
-    const current = this.getById(entityType, id);
+  ): Promise<{ success: boolean; error?: string }> {
+    const current = await this.getById(entityType, id);
     if (!current) {
       return { success: false, error: 'السجل غير موجود' };
     }
 
-    masterDataRepository.delete(entityType, id);
+    await masterDataRepository.delete(entityType, id);
 
     // Audit log
     const userName = getCurrentUserName();
-    this.logAudit(entityType, id, 'DELETE', current, null, userName);
+    await this.logAudit(entityType, id, 'DELETE', current, null, userName);
 
     return { success: true };
   }
@@ -195,23 +195,23 @@ export class MasterDataService {
   /**
    * Bulk delete records
    */
-  bulkDelete(
+  async bulkDelete(
     entityType: string,
     ids: string[]
-  ): { success: number; failed: number; errors: string[] } {
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
     let success = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    ids.forEach(id => {
-      const result = this.delete(entityType, id);
+    for (const id of ids) {
+      const result = await this.delete(entityType, id);
       if (result.success) {
         success++;
       } else {
         failed++;
         errors.push(result.error || `فشل حذف ${id}`);
       }
-    });
+    }
 
     return { success, failed, errors };
   }
@@ -219,19 +219,20 @@ export class MasterDataService {
   /**
    * Import data from Excel/CSV with transaction
    */
-  importData<T extends MasterDataEntity>(
+  async importData<T extends MasterDataEntity>(
     entityType: string,
     rows: Partial<T>[]
-  ): ImportResult {
+  ): Promise<ImportResult> {
     let success = 0;
     let failed = 0;
     const errors: string[] = [];
-    const existing = this.getAll<T>(entityType, false);
+    const existing = await this.getAll<T>(entityType, false);
 
     // For bulk imports, use transaction for better performance
-    rows.forEach((row, index) => {
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
       try {
-        const result = this.create(entityType, row, existing);
+        const result = await this.create(entityType, row, existing);
         if (result.success && result.record) {
           success++;
           existing.push(result.record);
@@ -243,11 +244,11 @@ export class MasterDataService {
         failed++;
         errors.push(`الصف ${index + 1}: خطأ غير متوقع - ${err.message}`);
       }
-    });
+    }
 
     // Audit
     const userName = getCurrentUserName();
-    this.logAudit(entityType, 'BULK', 'IMPORT',
+    await this.logAudit(entityType, 'BULK', 'IMPORT',
       { count: rows.length },
       { success, failed },
       userName
@@ -259,10 +260,10 @@ export class MasterDataService {
   /**
    * Export data
    */
-  exportData<T extends MasterDataEntity>(
+  async exportData<T extends MasterDataEntity>(
     options: ExportOptions
-  ): { data: T[]; fileName: string } {
-    const records = this.getAll<T>(options.entityType, false);
+  ): Promise<{ data: T[]; fileName: string }> {
+    const records = await this.getAll<T>(options.entityType, false);
     const dateStr = new Date().toISOString().split('T')[0];
     const entityMap: Record<string, string> = {
       academic_years: 'السنوات_الدراسية',
@@ -278,7 +279,7 @@ export class MasterDataService {
 
     // Audit
     const userName = getCurrentUserName();
-    this.logAudit(options.entityType, 'ALL', 'EXPORT',
+    await this.logAudit(options.entityType, 'ALL', 'EXPORT',
       { format: options.format, count: records.length },
       null,
       userName
@@ -290,14 +291,14 @@ export class MasterDataService {
   /**
    * Log audit trail for master data operations
    */
-  private logAudit(
+  private async logAudit(
     entityType: string,
     entityId: string,
     action: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'PRINT',
     oldValues: any,
     newValues: any,
     performedBy: string
-  ): void {
+  ): Promise<void> {
     try {
       const log: MasterDataAuditLog = {
         id: generateId(),
@@ -311,7 +312,7 @@ export class MasterDataService {
         ip_address: null,
         details: null
       };
-      masterDataRepository.logAudit(log as any);
+      await masterDataRepository.logAudit(log as any);
     } catch (err) {
       console.error('Failed to log audit:', err);
     }
@@ -320,7 +321,7 @@ export class MasterDataService {
   /**
    * Get audit logs for a specific entity
    */
-  getAuditLogs(entityType?: string, limit: number = 50): MasterDataAuditLog[] {
+  async getAuditLogs(entityType?: string, limit: number = 50): Promise<MasterDataAuditLog[]> {
     return masterDataRepository.getAuditLogs(entityType, limit);
   }
 }

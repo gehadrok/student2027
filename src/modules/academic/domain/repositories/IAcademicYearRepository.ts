@@ -11,25 +11,25 @@ export interface IAcademicYearRepository {
    * Persist an AcademicYear aggregate (insert or update) inside a UnitOfWork.
    * Dispatches any collected domain events to the EventBus.
    */
-  save(year: AcademicYear): void;
+  save(year: AcademicYear): Promise<void>;
 
   /**
    * Find an AcademicYear by its identity.
    */
-  findById(id: AcademicYearId): AcademicYear | null;
+  findById(id: AcademicYearId): Promise<AcademicYear | null>;
 
   /**
    * Find an AcademicYear by its unique code.
    */
-  findByCode(code: AcademicYearCode): AcademicYear | null;
+  findByCode(code: AcademicYearCode): Promise<AcademicYear | null>;
 
   /**
    * List all persisted AcademicYears.
    */
-  getAll(): AcademicYear[];
+  getAll(): Promise<AcademicYear[]>;
 
   /**
    * Delete an AcademicYear by identity.
    */
-  delete(id: AcademicYearId): boolean;
+  delete(id: AcademicYearId): Promise<boolean>;
 }

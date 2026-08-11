@@ -20,8 +20,8 @@ export class FinancialRepository implements IFinancialRepository {
     this.dataSource = dataSource || DataSourceFactory.getInstance();
   }
 
-  getAllPayments(): FeePayment[] {
-    const rows = this.dataSource.query<any>(
+  async getAllPayments(): Promise<FeePayment[]> {
+    const rows = await this.dataSource.query<any>(
       `SELECT id, student_id, receipt_number, title, total_amount, paid_amount, remaining_amount,
               due_date, paid_date, status, payment_method, notes
        FROM fee_payments ORDER BY due_date DESC`
@@ -44,8 +44,8 @@ export class FinancialRepository implements IFinancialRepository {
     }));
   }
 
-  getAllExpenses(): ExpenseRecord[] {
-    const rows = this.dataSource.query<any>(
+  async getAllExpenses(): Promise<ExpenseRecord[]> {
+    const rows = await this.dataSource.query<any>(
       `SELECT id, voucher_number, category, title, amount, date, beneficiary, approved_by, notes
        FROM expense_records ORDER BY date DESC`
     );
@@ -63,12 +63,12 @@ export class FinancialRepository implements IFinancialRepository {
     }));
   }
 
-  savePayment(payment: FeePayment): FeePayment {
+  async savePayment(payment: FeePayment): Promise<FeePayment> {
     const total = payment.totalAmount || payment.amount || 0;
     const paid = payment.paidAmount || 0;
     const remaining = total - paid;
 
-    this.dataSource.execute(
+    await this.dataSource.execute(
       `INSERT OR REPLACE INTO fee_payments (
         id, student_id, receipt_number, title, total_amount, paid_amount, remaining_amount,
         due_date, paid_date, status, payment_method, notes
@@ -92,8 +92,8 @@ export class FinancialRepository implements IFinancialRepository {
     return payment;
   }
 
-  saveExpense(expense: ExpenseRecord): ExpenseRecord {
-    this.dataSource.execute(
+  async saveExpense(expense: ExpenseRecord): Promise<ExpenseRecord> {
+    await this.dataSource.execute(
       `INSERT OR REPLACE INTO expense_records (
         id, voucher_number, category, title, amount, date, beneficiary, approved_by, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

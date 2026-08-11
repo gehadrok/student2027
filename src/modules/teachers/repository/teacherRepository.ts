@@ -20,22 +20,23 @@ export class TeacherRepository implements ITeacherRepository {
     this.dataSource = dataSource || DataSourceFactory.getInstance();
   }
 
-  getAll(): Teacher[] {
-    const rows = this.dataSource.query<any>(
+  async getAll(): Promise<Teacher[]> {
+    const rows = await this.dataSource.query<any>(
       `SELECT id, user_id, name, email, phone, specialization, qualification, experience_years, photo, status
        FROM teachers ORDER BY name ASC`
     );
 
-    return rows.map((r: any) => {
-      const subRows = this.dataSource.query<any>(
+    const result: Teacher[] = [];
+    for (const r of rows) {
+      const subRows = await this.dataSource.query<any>(
         'SELECT subject_id FROM teacher_subjects WHERE teacher_id = ?',
         [r.id]
       );
-      const clsRows = this.dataSource.query<any>(
+      const clsRows = await this.dataSource.query<any>(
         'SELECT class_id FROM teacher_classes WHERE teacher_id = ?',
         [r.id]
       );
-      return {
+      result.push({
         id: r.id,
         userId: r.user_id,
         name: r.name,
@@ -48,12 +49,13 @@ export class TeacherRepository implements ITeacherRepository {
         classIds: clsRows.map((c: any) => c.class_id),
         photo: r.photo || undefined,
         status: r.status,
-      };
-    });
+      });
+    }
+    return result;
   }
 
-  getById(id: string): Teacher | undefined {
-    const row = this.dataSource.queryOne<any>(
+  async getById(id: string): Promise<Teacher | undefined> {
+    const row = await this.dataSource.queryOne<any>(
       `SELECT id, user_id, name, email, phone, specialization, qualification, experience_years, photo, status
        FROM teachers WHERE id = ?`,
       [id]
@@ -76,8 +78,8 @@ export class TeacherRepository implements ITeacherRepository {
     };
   }
 
-  save(teacher: Teacher): Teacher {
-    this.dataSource.execute(
+  async save(teacher: Teacher): Promise<Teacher> {
+    await this.dataSource.execute(
       `INSERT OR REPLACE INTO teachers (
         id, user_id, name, email, phone, specialization, qualification, experience_years, photo, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -96,30 +98,30 @@ export class TeacherRepository implements ITeacherRepository {
     );
 
     if (teacher.subjectIds) {
-      this.dataSource.execute('DELETE FROM teacher_subjects WHERE teacher_id = ?', [teacher.id]);
-      teacher.subjectIds.forEach((subId) => {
-        this.dataSource.execute(
+      await this.dataSource.execute('DELETE FROM teacher_subjects WHERE teacher_id = ?', [teacher.id]);
+      for (const subId of teacher.subjectIds) {
+        await this.dataSource.execute(
           'INSERT OR IGNORE INTO teacher_subjects (teacher_id, subject_id) VALUES (?, ?)',
           [teacher.id, subId]
         );
-      });
+      }
     }
 
     if (teacher.classIds) {
-      this.dataSource.execute('DELETE FROM teacher_classes WHERE teacher_id = ?', [teacher.id]);
-      teacher.classIds.forEach((clsId) => {
-        this.dataSource.execute(
+      await this.dataSource.execute('DELETE FROM teacher_classes WHERE teacher_id = ?', [teacher.id]);
+      for (const clsId of teacher.classIds) {
+        await this.dataSource.execute(
           'INSERT OR IGNORE INTO teacher_classes (teacher_id, class_id) VALUES (?, ?)',
           [teacher.id, clsId]
         );
-      });
+      }
     }
 
     return teacher;
   }
 
-  delete(id: string): boolean {
-    const result = this.dataSource.execute('DELETE FROM teachers WHERE id = ?', [id]);
+  async delete(id: string): Promise<boolean> {
+    const result = await this.dataSource.execute('DELETE FROM teachers WHERE id = ?', [id]);
     return result.changes > 0;
   }
 }

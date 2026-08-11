@@ -3,8 +3,8 @@ import { Teacher } from '../../../types';
 import { TeacherFilter } from '../types';
 
 export class TeacherService {
-  getFilteredTeachers(filter: TeacherFilter): Teacher[] {
-    let teachers = teacherRepository.getAll();
+  async getFilteredTeachers(filter: TeacherFilter): Promise<Teacher[]> {
+    let teachers = await teacherRepository.getAll();
 
     if (filter.status && filter.status !== 'all') {
       teachers = teachers.filter((t) => t.status === filter.status);
@@ -28,7 +28,7 @@ export class TeacherService {
     return teachers;
   }
 
-  addTeacher(teacherData: Omit<Teacher, 'id' | 'userId'>): Teacher {
+  async addTeacher(teacherData: Omit<Teacher, 'id' | 'userId'>): Promise<Teacher> {
     const newTeacher: Teacher = {
       ...teacherData,
       id: 't_' + Date.now().toString(36),
@@ -37,8 +37,8 @@ export class TeacherService {
     return teacherRepository.save(newTeacher);
   }
 
-  updateTeacher(id: string, updateData: Partial<Teacher>): Teacher | undefined {
-    const existing = teacherRepository.getById(id);
+  async updateTeacher(id: string, updateData: Partial<Teacher>): Promise<Teacher | undefined> {
+    const existing = await teacherRepository.getById(id);
     if (!existing) return undefined;
 
     const updated: Teacher = {
@@ -48,7 +48,7 @@ export class TeacherService {
     return teacherRepository.save(updated);
   }
 
-  deleteTeacher(id: string): boolean {
+  async deleteTeacher(id: string): Promise<boolean> {
     return teacherRepository.delete(id);
   }
 }

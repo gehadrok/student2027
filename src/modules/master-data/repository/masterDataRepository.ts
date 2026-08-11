@@ -64,7 +64,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     this.dataSource = dataSource || DataSourceFactory.getInstance();
   }
 
-  getAll(entityType: string, filter: MasterDataFilter = {}): PaginatedResult<any> {
+  async getAll(entityType: string, filter: MasterDataFilter = {}): Promise<PaginatedResult<any>> {
     const table = TABLE_MAP[entityType];
     if (!table) {
       return { data: [], total: 0, page: 1, pageSize: 25, totalPages: 0 };
@@ -91,7 +91,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count
-    const total = this.dataSource.count(
+    const total = await this.dataSource.count(
       `SELECT COUNT(*) as cnt FROM ${table} ${whereClause}`,
       params
     );
@@ -106,7 +106,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     const pageSize = filter.pageSize || 25;
     const offset = (page - 1) * pageSize;
 
-    const data = this.dataSource.query(
+    const data = await this.dataSource.query(
       `SELECT * FROM ${table} ${whereClause} ${orderClause} LIMIT ? OFFSET ?`,
       [...params, pageSize, offset]
     );
@@ -120,7 +120,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     };
   }
 
-  getAllFlat(entityType: string, activeOnly: boolean = true): any[] {
+  async getAllFlat(entityType: string, activeOnly: boolean = true): Promise<any[]> {
     const table = TABLE_MAP[entityType];
     if (!table) return [];
 
@@ -134,14 +134,14 @@ export class MasterDataRepository implements IMasterDataRepository {
     );
   }
 
-  getById(entityType: string, id: string): any | null {
+  async getById(entityType: string, id: string): Promise<any | null> {
     const table = TABLE_MAP[entityType];
     if (!table) return null;
 
     return this.dataSource.queryOne(`SELECT * FROM ${table} WHERE id = ?`, [id]);
   }
 
-  isFieldUnique(entityType: string, field: string, value: string, excludeId?: string): boolean {
+  async isFieldUnique(entityType: string, field: string, value: string, excludeId?: string): Promise<boolean> {
     const table = TABLE_MAP[entityType];
     if (!table) return true;
 
@@ -153,10 +153,10 @@ export class MasterDataRepository implements IMasterDataRepository {
       params.push(excludeId);
     }
 
-    return !this.dataSource.exists(sql, params);
+    return !(await this.dataSource.exists(sql, params));
   }
 
-  create(entityType: string, data: Record<string, any>): any | null {
+  async create(entityType: string, data: Record<string, any>): Promise<any | null> {
     const table = TABLE_MAP[entityType];
     if (!table) return null;
 
@@ -177,16 +177,16 @@ export class MasterDataRepository implements IMasterDataRepository {
     }
 
     const sql = `INSERT INTO ${table} (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`;
-    this.dataSource.execute(sql, values);
+    await this.dataSource.execute(sql, values);
 
     return this.getById(entityType, id);
   }
 
-  update(entityType: string, id: string, data: Record<string, any>): any | null {
+  async update(entityType: string, id: string, data: Record<string, any>): Promise<any | null> {
     const table = TABLE_MAP[entityType];
     if (!table) return null;
 
-    const existing = this.getById(entityType, id);
+    const existing = await this.getById(entityType, id);
     if (!existing) return null;
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -203,24 +203,24 @@ export class MasterDataRepository implements IMasterDataRepository {
 
     values.push(id);
     const sql = `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = ?`;
-    this.dataSource.execute(sql, values);
+    await this.dataSource.execute(sql, values);
 
     return this.getById(entityType, id);
   }
 
-  delete(entityType: string, id: string): boolean {
+  async delete(entityType: string, id: string): Promise<boolean> {
     const table = TABLE_MAP[entityType];
     if (!table) return false;
 
     try {
       // Check for child records before deleting
-      const childRelations = this.getChildRelations(entityType, id);
+      const childRelations = await this.getChildRelations(entityType, id);
       if (childRelations.length > 0) {
         console.warn(`Cannot delete ${entityType} ${id}: has child records`, childRelations);
         return false;
       }
 
-      const result = this.dataSource.execute(`DELETE FROM ${table} WHERE id = ?`, [id]);
+      const result = await this.dataSource.execute(`DELETE FROM ${table} WHERE id = ?`, [id]);
       return result.changes > 0;
     } catch (err) {
       console.error(`Failed to delete from ${table}:`, err);
@@ -228,7 +228,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     }
   }
 
-  bulkDelete(entityType: string, ids: string[]): { success: number; failed: number; errors: string[] } {
+  async bulkDelete(entityType: string, ids: string[]): Promise<{ success: number; failed: number; errors: string[] }> {
     const table = TABLE_MAP[entityType];
     if (!table) return { success: 0, failed: ids.length, errors: ['Invalid entity type'] };
 
@@ -236,7 +236,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     const queries: Array<{ sql: string; params?: any[] }> = [];
 
     for (const id of ids) {
-      const childRelations = this.getChildRelations(entityType, id);
+      const childRelations = await this.getChildRelations(entityType, id);
       if (childRelations.length > 0) {
         errors.push(`Cannot delete ${id}: has ${childRelations.length} child record(s)`);
         continue;
@@ -248,7 +248,7 @@ export class MasterDataRepository implements IMasterDataRepository {
       return { success: 0, failed: ids.length, errors };
     }
 
-    const result = this.dataSource.transaction(queries);
+    const result = await this.dataSource.transaction(queries);
     if (!result.success) {
       errors.push(result.error || 'Transaction failed');
       return { success: 0, failed: ids.length, errors };
@@ -257,11 +257,11 @@ export class MasterDataRepository implements IMasterDataRepository {
     return { success: queries.length, failed: ids.length - queries.length, errors };
   }
 
-  getParentRecords(parentEntityType: string): any[] {
+  async getParentRecords(parentEntityType: string): Promise<any[]> {
     return this.getAllFlat(parentEntityType);
   }
 
-  getFieldOptions(entityType: string, fieldName: string): { value: string; label: string }[] {
+  async getFieldOptions(entityType: string, fieldName: string): Promise<{ value: string; label: string }[]> {
     const optionMap: Record<string, Record<string, string>> = {
       room_type: {
         classroom: 'فصل دراسي',
@@ -287,11 +287,11 @@ export class MasterDataRepository implements IMasterDataRepository {
     return Object.entries(opts).map(([value, label]) => ({ value, label }));
   }
 
-  logAudit(entry: Omit<MasterDataAuditLog, 'id' | 'performed_at'>): void {
+  async logAudit(entry: Omit<MasterDataAuditLog, 'id' | 'performed_at'>): Promise<void> {
     const id = `md_audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-    this.dataSource.execute(
+    await this.dataSource.execute(
       `INSERT INTO master_data_audit_log (id, entity_type, entity_id, action, old_values, new_values, performed_by, performed_at, ip_address, details)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -309,7 +309,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     );
   }
 
-  getAuditLogs(entityType?: string, limit: number = 50): MasterDataAuditLog[] {
+  async getAuditLogs(entityType?: string, limit: number = 50): Promise<MasterDataAuditLog[]> {
     let sql = 'SELECT * FROM master_data_audit_log';
     const params: any[] = [];
 
@@ -321,7 +321,8 @@ export class MasterDataRepository implements IMasterDataRepository {
     sql += ' ORDER BY performed_at DESC LIMIT ?';
     params.push(limit);
 
-    return this.dataSource.query(sql, params).map((r: any) => ({
+    const rows = await this.dataSource.query(sql, params);
+    return rows.map((r: any) => ({
       id: r.id,
       entity_type: r.entity_type,
       entity_id: r.entity_id,
@@ -335,8 +336,8 @@ export class MasterDataRepository implements IMasterDataRepository {
     }));
   }
 
-  generateNextNumber(code: string): string | null {
-    const configs = this.dataSource.query<any>(
+  async generateNextNumber(code: string): Promise<string | null> {
+    const configs = await this.dataSource.query<any>(
       'SELECT * FROM system_numbering WHERE code = ? AND is_active = 1',
       [code]
     );
@@ -347,7 +348,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     const padded = String(nextNum).padStart(config.pad_length, '0');
     const result = `${config.prefix}${padded}`;
 
-    this.dataSource.execute(
+    await this.dataSource.execute(
       'UPDATE system_numbering SET next_number = next_number + ? WHERE code = ? AND is_active = 1',
       [config.step, code]
     );
@@ -355,17 +356,17 @@ export class MasterDataRepository implements IMasterDataRepository {
     return result;
   }
 
-  getPermission(
+  async getPermission(
     entityType: string
-  ): {
+  ): Promise<{
     can_view: number;
     can_create: number;
     can_edit: number;
     can_delete: number;
     can_import: number;
     can_export: number;
-  } | null {
-    const result = this.dataSource.queryOne<any>(
+  } | null> {
+    const result = await this.dataSource.queryOne<any>(
       'SELECT can_view, can_create, can_edit, can_delete, can_import, can_export FROM master_data_permissions WHERE entity_type = ?',
       [entityType]
     );
@@ -376,7 +377,7 @@ export class MasterDataRepository implements IMasterDataRepository {
    * Check for child records that reference this parent record.
    * Used to prevent orphan deletion.
    */
-  private getChildRelations(entityType: string, id: string): { table: string; count: number }[] {
+  private async getChildRelations(entityType: string, id: string): Promise<{ table: string; count: number }[]> {
     const relationMap: Record<string, Array<{ table: string; fk: string }>> = {
       education_stages: [{ table: 'grade_levels', fk: 'education_stage_id' }],
       grade_levels: [{ table: 'sections_master', fk: 'grade_level_id' }],
@@ -402,7 +403,7 @@ export class MasterDataRepository implements IMasterDataRepository {
 
     for (const rel of relations) {
       try {
-        const count = this.dataSource.count(
+        const count = await this.dataSource.count(
           `SELECT COUNT(*) as cnt FROM ${rel.table} WHERE ${rel.fk} = ?`,
           [id]
         );

@@ -1,6 +1,6 @@
 # TODO — Academic Runtime Persistence Remediation (Step 1 Only)
 
-**Status:** IN PROGRESS
+**Status:** COMPLETE
 
 ## Root Cause
 Runtime SQLite bootstrap (`src/lib/sqlite-engine.ts`) loads only
@@ -20,10 +20,10 @@ repositories also reference columns missing from the canonical runtime schema
         - schedule_periods.academic_week, schedule_periods.updated_at, relax day CHECK
 - [x] 5. Create migrations/002_academic_runtime_schema.sql (ledger of additive changes)
 - [x] 6. Create scripts/verify-academic-runtime-persistence.ts (REAL sql.js DB, same startup path)
-- [ ] 7. Run real-SQLite verification (create/save/findById/reconstruct/terms/curriculum/CA/calendar/update/delete/rollback)
-- [ ] 8. Run existing integration regression (run-academic-integration.mjs)
-- [ ] 9. Run TypeScript verification (tsc --noEmit) and production build
-- [ ] 10. Create docs/ACADEMIC_RUNTIME_PERSISTENCE_REMEDIATION_REPORT.md
+- [x] 7. Run real-SQLite verification (create/save/findById/reconstruct/terms/curriculum/CA/calendar/update/delete/rollback) — 47/47 PASS
+- [x] 8. Run existing integration regression (run-academic-integration.mjs) — 68/68 PASS
+- [x] 9. Run TypeScript verification (tsc --noEmit) and production build — no new errors; build PASS
+- [x] 10. Create docs/ACADEMIC_RUNTIME_PERSISTENCE_FIX_REPORT.md (rename of the remediation report deliverable)
 
 ## Constraints
 - No repository/domain/aggregate behavior changes.

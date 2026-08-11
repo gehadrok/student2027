@@ -36,10 +36,10 @@ export class SQLiteAcademicYearRepository implements IAcademicYearRepository {
     this.eventBus = eventBus || EventBus.getInstance();
   }
 
-  save(year: AcademicYear): void {
+  async save(year: AcademicYear): Promise<void> {
     const { year: yearRow, terms: termRows } = academicYearToRows(year);
 
-    const existing = this.dataSource.exists(
+    const existing = await this.dataSource.exists(
       'SELECT 1 FROM academic_years WHERE id = ?',
       [yearRow.id]
     );
@@ -120,7 +120,7 @@ export class SQLiteAcademicYearRepository implements IAcademicYearRepository {
 for (const query of queries) {
       this.unitOfWork.register(query.sql, query.params);
     }
-    const result = this.unitOfWork.commit();
+    const result = await this.unitOfWork.commit();
 
     if (!result.success) {
       throw new Error(`AcademicYear save failed: ${result.error || 'unknown'}`);
@@ -133,14 +133,14 @@ for (const query of queries) {
     }
   }
 
-  findById(id: AcademicYearId): AcademicYear | null {
-    const yearRow = this.dataSource.queryOne<AcademicYearRow>(
+  async findById(id: AcademicYearId): Promise<AcademicYear | null> {
+    const yearRow = await this.dataSource.queryOne<AcademicYearRow>(
       'SELECT * FROM academic_years WHERE id = ?',
       [id.toString()]
     );
     if (!yearRow) return null;
 
-    const termRows = this.dataSource.query<AcademicTermRow>(
+    const termRows = await this.dataSource.query<AcademicTermRow>(
       'SELECT * FROM academic_terms WHERE academic_year_id = ?',
       [id.toString()]
     );
@@ -148,14 +148,14 @@ for (const query of queries) {
     return academicYearFromRows(yearRow, termRows);
   }
 
-  findByCode(code: AcademicYearCode): AcademicYear | null {
-    const yearRow = this.dataSource.queryOne<AcademicYearRow>(
+  async findByCode(code: AcademicYearCode): Promise<AcademicYear | null> {
+    const yearRow = await this.dataSource.queryOne<AcademicYearRow>(
       'SELECT * FROM academic_years WHERE code = ?',
       [code.toString()]
     );
     if (!yearRow) return null;
 
-    const termRows = this.dataSource.query<AcademicTermRow>(
+    const termRows = await this.dataSource.query<AcademicTermRow>(
       'SELECT * FROM academic_terms WHERE academic_year_id = ?',
       [yearRow.id]
     );
@@ -163,21 +163,23 @@ for (const query of queries) {
     return academicYearFromRows(yearRow, termRows);
   }
 
-  getAll(): AcademicYear[] {
-    const yearRows = this.dataSource.query<AcademicYearRow>(
+  async getAll(): Promise<AcademicYear[]> {
+    const yearRows = await this.dataSource.query<AcademicYearRow>(
       'SELECT * FROM academic_years ORDER BY start_date ASC'
     );
-    return yearRows.map((yearRow) => {
-      const termRows = this.dataSource.query<AcademicTermRow>(
+    const years: AcademicYear[] = [];
+    for (const yearRow of yearRows) {
+      const termRows = await this.dataSource.query<AcademicTermRow>(
         'SELECT * FROM academic_terms WHERE academic_year_id = ?',
         [yearRow.id]
       );
-      return academicYearFromRows(yearRow, termRows);
-    });
+      years.push(academicYearFromRows(yearRow, termRows));
+    }
+    return years;
   }
 
-  delete(id: AcademicYearId): boolean {
-    const result = this.dataSource.execute(
+  async delete(id: AcademicYearId): Promise<boolean> {
+    const result = await this.dataSource.execute(
       'DELETE FROM academic_years WHERE id = ?',
       [id.toString()]
     );

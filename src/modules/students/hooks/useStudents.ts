@@ -9,17 +9,15 @@ export const useStudents = (initialFilter: StudentFilter = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StudentFilter>(initialFilter);
 
-  const fetchStudents = useCallback(() => {
+  const fetchStudents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setTimeout(() => {
-        const data = studentService.getFilteredStudents(filter);
-        setStudents(data);
-        setIsLoading(false);
-      }, 100);
+      const data = await studentService.getFilteredStudents(filter);
+      setStudents(data);
     } catch (err: any) {
       setError(err.message || 'خطأ في جلب بيانات الطلاب');
+    } finally {
       setIsLoading(false);
     }
   }, [filter]);
@@ -35,19 +33,19 @@ export const useStudents = (initialFilter: StudentFilter = {}) => {
     filter,
     setFilter,
     refetch: fetchStudents,
-    addStudent: (data: Omit<Student, 'id' | 'userId'>) => {
-      const res = studentService.addStudent(data);
-      fetchStudents();
+    addStudent: async (data: Omit<Student, 'id' | 'userId'>) => {
+      const res = await studentService.addStudent(data);
+      await fetchStudents();
       return res;
     },
-    updateStudent: (id: string, data: Partial<Student>) => {
-      const res = studentService.updateStudent(id, data);
-      fetchStudents();
+    updateStudent: async (id: string, data: Partial<Student>) => {
+      const res = await studentService.updateStudent(id, data);
+      await fetchStudents();
       return res;
     },
-    deleteStudent: (id: string) => {
-      const res = studentService.deleteStudent(id);
-      fetchStudents();
+    deleteStudent: async (id: string) => {
+      const res = await studentService.deleteStudent(id);
+      await fetchStudents();
       return res;
     }
   };

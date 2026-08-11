@@ -36,20 +36,17 @@ export function useMasterData<T extends MasterDataEntity>(
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Simulate async for UX consistency
-      setTimeout(() => {
-        const result = masterDataService.getPaginated<T>(entityType, filter);
-        setData(result.data);
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-        setIsLoading(false);
-      }, 80);
+      const result = await masterDataService.getPaginated<T>(entityType, filter);
+      setData(result.data);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
     } catch (err: any) {
       setError(err.message || 'خطأ في جلب البيانات');
+    } finally {
       setIsLoading(false);
     }
   }, [entityType, filter]);
@@ -85,29 +82,29 @@ export function useMasterData<T extends MasterDataEntity>(
     setEditRecord(null);
   }, []);
 
-  const handleCreate = useCallback((formData: Partial<T>): { success: boolean; errors: ValidationError[] } => {
-    const existing = masterDataService.getAll<T>(entityType, false);
-    const result = masterDataService.create(entityType, formData, existing);
+  const handleCreate = useCallback(async (formData: Partial<T>): Promise<{ success: boolean; errors: ValidationError[] }> => {
+    const existing = await masterDataService.getAll<T>(entityType, false);
+    const result = await masterDataService.create(entityType, formData, existing);
     if (result.success) {
       closeForm();
-      fetchData();
+      await fetchData();
     }
     return { success: result.success, errors: result.errors };
   }, [entityType, fetchData, closeForm]);
 
-  const handleUpdate = useCallback((formData: Partial<T>): { success: boolean; errors: ValidationError[] } => {
+  const handleUpdate = useCallback(async (formData: Partial<T>): Promise<{ success: boolean; errors: ValidationError[] }> => {
     if (!editRecord) return { success: false, errors: [{ field: 'id', message: 'لا يوجد سجل للتعديل' }] };
-    const existing = masterDataService.getAll<T>(entityType, false);
-    const result = masterDataService.update(entityType, editRecord.id, formData, existing);
+    const existing = await masterDataService.getAll<T>(entityType, false);
+    const result = await masterDataService.update(entityType, editRecord.id, formData, existing);
     if (result.success) {
       closeForm();
-      fetchData();
+      await fetchData();
     }
     return { success: result.success, errors: result.errors };
   }, [entityType, editRecord, fetchData, closeForm]);
 
-  const handleDelete = useCallback((id: string) => {
-    const result = masterDataService.delete(entityType, id);
+  const handleDelete = useCallback(async (id: string) => {
+    const result = await masterDataService.delete(entityType, id);
     if (result.success) {
       setShowDeleteConfirm(null);
       setSelectedIds(prev => {
@@ -115,17 +112,17 @@ export function useMasterData<T extends MasterDataEntity>(
         next.delete(id);
         return next;
       });
-      fetchData();
+      await fetchData();
     }
     return result;
   }, [entityType, fetchData]);
 
-  const handleBulkDelete = useCallback(() => {
+  const handleBulkDelete = useCallback(async () => {
     const ids: string[] = Array.from(selectedIds);
     if (ids.length === 0) return { success: 0, failed: 0, errors: [] };
-    const result = masterDataService.bulkDelete(entityType, ids);
+    const result = await masterDataService.bulkDelete(entityType, ids);
     setSelectedIds(new Set());
-    fetchData();
+    await fetchData();
     return result;
   }, [entityType, selectedIds, fetchData]);
 
@@ -149,13 +146,13 @@ export function useMasterData<T extends MasterDataEntity>(
     }
   }, [data, selectedIds]);
 
-  const importData = useCallback((rows: Partial<T>[]): ImportResult => {
-    const result = masterDataService.importData(entityType, rows);
-    fetchData();
+  const importData = useCallback(async (rows: Partial<T>[]): Promise<ImportResult> => {
+    const result = await masterDataService.importData(entityType, rows);
+    await fetchData();
     return result;
   }, [entityType, fetchData]);
 
-  const exportData = useCallback((format: 'excel' | 'csv' | 'pdf' = 'excel') => {
+  const exportData = useCallback(async (format: 'excel' | 'csv' | 'pdf' = 'excel') => {
     return masterDataService.exportData<T>({ format, entityType });
   }, [entityType]);
 
@@ -216,14 +213,21 @@ export function useMasterDataLookup<T extends MasterDataEntity>(
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    try {
-      const result = masterDataService.getAll<T>(entityType, activeOnly);
-      setRecords(result);
-    } catch {
-      setRecords([]);
-    }
-    setIsLoading(false);
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      try {
+        const result = await masterDataService.getAll<T>(entityType, activeOnly);
+        if (!cancelled) setRecords(result);
+      } catch {
+        if (!cancelled) setRecords([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [entityType, activeOnly]);
 
   return { records, isLoading };

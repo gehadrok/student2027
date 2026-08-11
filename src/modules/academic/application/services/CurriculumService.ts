@@ -36,42 +36,45 @@ function toRecord(command: SaveCurriculumCommand): CurriculumRecord {
 export class CurriculumService {
   constructor(private readonly repo: ICurriculumRepository) {}
 
-  save(command: SaveCurriculumCommand): CurriculumDto {
-    const saved = this.repo.save(toRecord(command));
+  async save(command: SaveCurriculumCommand): Promise<CurriculumDto> {
+    const saved = await this.repo.save(toRecord(command));
     if (!saved) {
       throw new Error(`Curriculum save failed: ${command.id}`);
     }
     return curriculumRecordToDto(saved);
   }
 
-  delete(command: DeleteCurriculumCommand): boolean {
+  async delete(command: DeleteCurriculumCommand): Promise<boolean> {
     return this.repo.delete(new CurriculumId(command.id));
   }
 
-  getById(query: GetCurriculumByIdQuery): CurriculumDto {
-    const record = this.repo.findById(new CurriculumId(query.id));
+  async getById(query: GetCurriculumByIdQuery): Promise<CurriculumDto> {
+    const record = await this.repo.findById(new CurriculumId(query.id));
     if (!record) {
       throw new Error(`Curriculum not found: ${query.id}`);
     }
     return curriculumRecordToDto(record);
   }
 
-  getByCode(query: GetCurriculumByCodeQuery): CurriculumDto {
-    const record = this.repo.findByCode(new CurriculumCode(query.code));
+  async getByCode(query: GetCurriculumByCodeQuery): Promise<CurriculumDto> {
+    const record = await this.repo.findByCode(new CurriculumCode(query.code));
     if (!record) {
       throw new Error(`Curriculum not found by code: ${query.code}`);
     }
     return curriculumRecordToDto(record);
   }
 
-  list(query: ListCurriculumsQuery): CurriculumDto[] {
+  async list(query: ListCurriculumsQuery): Promise<CurriculumDto[]> {
     if (query.gradeLevelId) {
-      return this.repo.getByGradeLevel(new GradeLevelId(query.gradeLevelId)).map(curriculumRecordToDto);
+      const records = await this.repo.getByGradeLevel(new GradeLevelId(query.gradeLevelId));
+      return records.map(curriculumRecordToDto);
     }
-    return this.repo.getAll(query.activeOnly ?? true).map(curriculumRecordToDto);
+    const records = await this.repo.getAll(query.activeOnly ?? true);
+    return records.map(curriculumRecordToDto);
   }
 
-  listByStage(stageId: string): CurriculumDto[] {
-    return this.repo.getByStage(new EducationStageId(stageId)).map(curriculumRecordToDto);
+  async listByStage(stageId: string): Promise<CurriculumDto[]> {
+    const records = await this.repo.getByStage(new EducationStageId(stageId));
+    return records.map(curriculumRecordToDto);
   }
 }

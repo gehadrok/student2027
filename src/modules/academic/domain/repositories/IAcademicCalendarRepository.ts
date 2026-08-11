@@ -17,10 +17,10 @@ export interface AcademicCalendarRecord {
  * Repository contract for the Academic Calendar (school days).
  */
 export interface IAcademicCalendarRepository {
-  save(record: AcademicCalendarRecord): AcademicCalendarRecord | null;
-  findById(id: SchoolDayId): AcademicCalendarRecord | null;
-  findByDate(date: AcademicCalendarDate): AcademicCalendarRecord | null;
-  getByWeek(week: AcademicWeek): AcademicCalendarRecord[];
-  getAll(): AcademicCalendarRecord[];
-  delete(id: SchoolDayId): boolean;
+  save(record: AcademicCalendarRecord): Promise<AcademicCalendarRecord | null>;
+  findById(id: SchoolDayId): Promise<AcademicCalendarRecord | null>;
+  findByDate(date: AcademicCalendarDate): Promise<AcademicCalendarRecord | null>;
+  getByWeek(week: AcademicWeek): Promise<AcademicCalendarRecord[]>;
+  getAll(): Promise<AcademicCalendarRecord[]>;
+  delete(id: SchoolDayId): Promise<boolean>;
 }

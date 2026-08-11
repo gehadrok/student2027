@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, GraduationCap, DollarSign, UserCheck, UserX, TrendingUp, TrendingDown,
   AlertTriangle, ArrowUpRight, ShieldAlert, Sparkles, CheckCircle2, Calendar, 
@@ -6,8 +6,15 @@ import {
   Filter, ChevronRight, BarChart3, PieChart as PieIcon
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
-import { AppNotification } from '../types';
+import { AppNotification, SchoolSettings } from '../types';
 import { dashboardService } from '../modules/dashboard/services/dashboardService';
+import {
+  DashboardKpis,
+  TopStudent,
+  StrugglingStudent,
+  ClassAbsence,
+  UpcomingExam
+} from '../modules/dashboard/types';
 
 interface AdminDashboardProps {
   onNavigate: (tab: string) => void;
@@ -18,15 +25,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onOp
   // ---------------------------------------------------------------------------
   // Use DashboardService instead of direct getRealmDB()
   // Violation fixed: no longer imports getRealmDB() from lib/db
+  // Async loading via service (now Promise-based)
   // ---------------------------------------------------------------------------
-  const settings = dashboardService.getSettings();
-  const kpis = dashboardService.getKpis();
-  const topStudentsList = dashboardService.getTopStudents(5);
-  const strugglingStudentsList = dashboardService.getStrugglingStudents();
-  const mostAbsentClasses = dashboardService.getMostAbsentClasses();
-  const classDistribution = dashboardService.getClassDistribution();
-  const attBreakdown = dashboardService.getAttendanceBreakdown();
-  const notificationsData = dashboardService.getNotifications();
+  const [settings, setSettings] = useState<SchoolSettings | null>(null);
+  const [kpis, setKpis] = useState<DashboardKpis>({
+    totalStudents: 0,
+    presentStudentsCount: 0,
+    absentStudentsCount: 0,
+    studentAttendanceRate: 0,
+    totalTeachers: 0,
+    presentTeachersCount: 0,
+    absentTeachersCount: 0,
+    teacherAttendanceRate: 0,
+    feesCollectedToday: 0,
+    todayTransactionsCount: 0,
+    overdueFeesTotal: 0,
+    overdueCount: 0,
+    totalRevenue: 0,
+    totalExpenses: 0,
+    netBalance: 0
+  });
+  const [topStudentsList, setTopStudentsList] = useState<TopStudent[]>([]);
+  const [strugglingStudentsList, setStrugglingStudentsList] = useState<StrugglingStudent[]>([]);
+  const [mostAbsentClasses, setMostAbsentClasses] = useState<ClassAbsence[]>([]);
+  const [classDistribution, setClassDistribution] = useState<{ name: string; count: number }[]>([]);
+  const [attBreakdown, setAttBreakdown] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [notificationsData, setNotificationsData] = useState<AppNotification[]>([]);
+  const [upcomingExamsList, setUpcomingExamsList] = useState<UpcomingExam[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [settingsData, kpisData, topStudents, strugglingStudents, absentClasses, distribution, breakdown, notifications, exams] = await Promise.all([
+          dashboardService.getSettings(),
+          dashboardService.getKpis(),
+          dashboardService.getTopStudents(5),
+          dashboardService.getStrugglingStudents(),
+          dashboardService.getMostAbsentClasses(),
+          dashboardService.getClassDistribution(),
+          dashboardService.getAttendanceBreakdown(),
+          dashboardService.getNotifications(),
+          dashboardService.getUpcomingExams()
+        ]);
+        if (cancelled) return;
+        setSettings(settingsData);
+        setKpis(kpisData);
+        setTopStudentsList(topStudents);
+        setStrugglingStudentsList(strugglingStudents);
+        setMostAbsentClasses(absentClasses);
+        setClassDistribution(distribution);
+        setAttBreakdown(breakdown);
+        setNotificationsData(notifications);
+        setUpcomingExamsList(exams);
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ---------------------------------------------------------------------------
   // 1 & 2. Student Attendance KPIs
@@ -57,9 +116,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onOp
   const netBalance = kpis.netBalance;
 
   // ---------------------------------------------------------------------------
-  // 7. Upcoming Exams (الامتحانات القادمة)
+  // 7. Upcoming Exams (الامتحانات القادمة) — loaded async above
   // ---------------------------------------------------------------------------
-  const upcomingExamsList = dashboardService.getUpcomingExams();
 
   // ---------------------------------------------------------------------------
   // 8. Notifications (الإشعارات) State & List
@@ -67,12 +125,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onOp
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     if (notificationsData && notificationsData.length > 0) return notificationsData;
     return [
-      { id: 'n1', title: 'مواعيد امتحانات الفصل الأول', message: 'تعلن إدارة المدرسة عن جدول الامتحانات النهائية المعتمد على المنصة.', type: 'info', isRead: false, createdAt: 'اليوم 08:00 ص' },
+      { id: 'n1', title: 'مواعيد امتحانات الفصل الأول', message: 'تعلن إدارة المدرسة عن جدول الامتحانات النهائية المعتمدة على المنصة.', type: 'info', isRead: false, createdAt: 'اليوم 08:00 ص' },
       { id: 'n2', title: 'تنبيه غياب طالب متكرر', message: 'تم رصد غياب الطالب عمر إبراهيم لـ 3 أيام متتالية دون تقديم عذر طبي.', type: 'warning', isRead: false, createdAt: 'اليوم 09:30 ص' },
       { id: 'n3', title: 'تحصيل رسوم دراسية جديدة', message: 'تم استلام مبلغ 150,000 ر.س سداد الأقساط المدرسية عبر نظام الكريمي.', type: 'success', isRead: true, createdAt: 'أمس 04:15 م' },
       { id: 'n4', title: 'تنبيه تأخر سداد أقساط', message: 'يوجد 4 أولياء أمور تجاوزوا موعد استحقاق القسط الثاني للرسوم.', type: 'danger', isRead: false, createdAt: 'أمس 02:00 م' }
     ];
   });
+
+  // When DB notifications arrive asynchronously, adopt them (fallback above used at mount).
+  useEffect(() => {
+    if (notificationsData && notificationsData.length > 0) {
+      setNotifications(notificationsData);
+    }
+  }, [notificationsData]);
 
   const toggleNotificationRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n));
@@ -105,7 +170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onOp
             مرحباً بك، أ. عبدالله الغامدي 👋
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-2xl leading-relaxed">
-            مؤشرات الأداء الرئيسية والتحليلات اللحظية لمدرسة <span className="text-white font-bold">{settings.schoolName || "خالد ابن الوليد"}</span>. 
+            مؤشرات الأداء الرئيسية والتحليلات اللحظية لمدرسة <span className="text-white font-bold">{settings?.schoolName || "خالد ابن الوليد"}</span>. 
             تتضمن متابعة الحضور، التحصيل المالي، الامتحانات القادمة، والطلاب المتفوقين والمتعثرين.
           </p>
         </div>

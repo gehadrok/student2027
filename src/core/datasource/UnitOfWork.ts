@@ -28,11 +28,11 @@ export class UnitOfWork {
   /**
    * Execute all registered queries in a single transaction.
    */
-  commit(): { success: boolean; error?: string } {
+  async commit(): Promise<{ success: boolean; error?: string }> {
     if (this.queries.length === 0) {
       return { success: true };
     }
-    const result = this.dataSource.transaction(this.queries);
+    const result = await this.dataSource.transaction(this.queries);
     this.queries = [];
     return result;
   }

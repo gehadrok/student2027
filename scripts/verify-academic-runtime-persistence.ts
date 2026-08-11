@@ -66,7 +66,7 @@ class RealSQLiteDataSource implements IDataSource {
     this.db.run('PRAGMA foreign_keys = ON;');
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const stmt = this.db.prepare(sql);
     try {
       stmt.bind(params || []);
@@ -80,35 +80,35 @@ class RealSQLiteDataSource implements IDataSource {
     }
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     this.db.run(sql, params || []);
-    const meta = this.queryOne<{ cnt: number; id: number }>(
+    const meta = await this.queryOne<{ cnt: number; id: number }>(
       'SELECT changes() as cnt, last_insert_rowid() as id'
     );
     return { changes: meta?.cnt ?? 0, lastInsertRowid: meta?.id ?? 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     try {
-      this.beginTransaction();
+      await this.beginTransaction();
       for (const q of queries) {
         this.db.run(q.sql, q.params || []);
       }
-      this.commit();
+      await this.commit();
       return { success: true };
 } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       console.error('>>> TRANSACTION ERROR:', err);
       return { success: false, error: err?.message || String(err) || 'Transaction failed' };
     }
   }
 
-  prepare(sql: string): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(sql: string): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     const stmt = this.db.prepare(sql);
     return {
       run: (params?: any[]) => stmt.bind(params || []),
@@ -116,23 +116,23 @@ class RealSQLiteDataSource implements IDataSource {
     };
   }
 
-  count(sql: string, params?: any[]): number {
-    return this.query(sql, params).length;
+  async count(sql: string, params?: any[]): Promise<number> {
+    return (await this.query(sql, params)).length;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    return (await this.count(sql, params)) > 0;
   }
 
-  beginTransaction(): void {
+  async beginTransaction(): Promise<void> {
     this.db.run('BEGIN TRANSACTION;');
   }
 
-  commit(): void {
+  async commit(): Promise<void> {
     this.db.run('COMMIT;');
   }
 
-  rollback(): void {
+  async rollback(): Promise<void> {
     this.db.run('ROLLBACK;');
   }
 }
@@ -172,12 +172,12 @@ export async function run(): Promise<number> {
 
   // Confirm the canonical runtime schema actually contains the academic tables.
   const tables = db.exec(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('academic_years','academic_terms','subjects_master','subjects','schedule_periods')"
+    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('academic_years','academic_terms','subjects_master','subjects','schedule_periods','academic_calendar_days')"
   );
   const tableNames = (tables[0]?.values ?? []).map((r) => String(r[0])).sort();
   check(
     'canonical runtime schema creates academic tables',
-    ['academic_terms', 'academic_years', 'schedule_periods', 'subjects', 'subjects_master'].every((t) =>
+    ['academic_calendar_days', 'academic_terms', 'academic_years', 'schedule_periods', 'subjects', 'subjects_master'].every((t) =>
       tableNames.includes(t)
     ),
     `found: ${tableNames.join(',')}`
@@ -193,6 +193,13 @@ export async function run(): Promise<number> {
   const spColNames = (spCols[0]?.values ?? []).map((r) => String(r[1]));
   check('schedule_periods has academic_week column', spColNames.includes('academic_week'));
   check('schedule_periods has updated_at column', spColNames.includes('updated_at'));
+
+  const calCols = db.exec('PRAGMA table_info(academic_calendar_days)');
+  const calColNames = (calCols[0]?.values ?? []).map((r) => String(r[1]));
+  check('academic_calendar_days has day column', calColNames.includes('day'));
+  check('academic_calendar_days has academic_week column', calColNames.includes('academic_week'));
+  check('academic_calendar_days has is_instructional column', calColNames.includes('is_instructional'));
+  check('academic_calendar_days has updated_at column', calColNames.includes('updated_at'));
 
   const ds = new RealSQLiteDataSource(db);
   const eventBus = EventBus.getInstance();
@@ -217,19 +224,19 @@ export async function run(): Promise<number> {
       createdBy: 'runtime-verify',
     });
 
-    yearRepo.save(year);
-    check('AcademicYear created (row exists)', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-ay-2025']));
+    await yearRepo.save(year);
+    check('AcademicYear created (row exists)', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-ay-2025']));
     check('AcademicYearCreated event published', published.includes('AcademicYearCreated'));
 
-    const loaded = yearRepo.findById(new AcademicYearId('rt-ay-2025'));
+    const loaded = await yearRepo.findById(new AcademicYearId('rt-ay-2025'));
     check('AcademicYear findById reconstructs', loaded !== null);
     check('reconstructed code', loaded?.code.toString() === '2025-2026');
     check('reconstructed dateRange start', loaded?.dateRange.startDate.toISOString().slice(0, 10) === '2025-09-01');
     check('reconstructed status draft', loaded?.status === 'draft');
 
     // Update path (save again)
-    yearRepo.save(year);
-    const re = yearRepo.findById(new AcademicYearId('rt-ay-2025'));
+    await yearRepo.save(year);
+    const re = await yearRepo.findById(new AcademicYearId('rt-ay-2025'));
     check('AcademicYear save (update path) persists', re !== null && re.code.toString() === '2025-2026');
   }
 
@@ -259,18 +266,18 @@ export async function run(): Promise<number> {
       }),
       'runtime-verify'
     );
-    yearRepo.save(year);
+    await yearRepo.save(year);
 
-    const loaded = yearRepo.findById(new AcademicYearId('rt-ay-terms'));
+    const loaded = await yearRepo.findById(new AcademicYearId('rt-ay-terms'));
     check('2 terms persisted and reconstructed', loaded?.terms.length === 2);
     check('term codes preserved', loaded?.terms.map((t) => t.code.toString()).join(',') === 'F1,S2');
-    check('academic_terms rows in real DB', ds.count('SELECT 1 FROM academic_terms WHERE academic_year_id = ?', ['rt-ay-terms']) === 2);
+    check('academic_terms rows in real DB', await ds.count('SELECT 1 FROM academic_terms WHERE academic_year_id = ?', ['rt-ay-terms']) === 2);
   }
 
   // ══════ 3. CURRICULUM PERSISTENCE ══════
   console.log('\n[3] Curriculum persistence');
   {
-    const saved = curriculumRepo.save({
+    const saved = await curriculumRepo.save({
       id: 'rt-cur-math',
       code: 'MATH-101',
       nameAr: 'رياضيات',
@@ -281,12 +288,12 @@ export async function run(): Promise<number> {
       displayOrder: 1,
     });
     check('curriculum save returns record', saved !== null);
-    check('curriculum row in subjects_master', ds.exists('SELECT 1 FROM subjects_master WHERE id = ?', ['rt-cur-math']));
-    check('curriculum findById', curriculumRepo.findById(new CurriculumId('rt-cur-math'))?.code === 'MATH-101');
-    check('curriculum findByCode', curriculumRepo.findByCode(new CurriculumCode('MATH-101'))?.id === 'rt-cur-math');
-    check('curriculum getByGradeLevel', curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7')).some((c) => c.id === 'rt-cur-math'));
+    check('curriculum row in subjects_master', await ds.exists('SELECT 1 FROM subjects_master WHERE id = ?', ['rt-cur-math']));
+    check('curriculum findById', (await curriculumRepo.findById(new CurriculumId('rt-cur-math')))?.code === 'MATH-101');
+    check('curriculum findByCode', (await curriculumRepo.findByCode(new CurriculumCode('MATH-101')))?.id === 'rt-cur-math');
+    check('curriculum getByGradeLevel', (await curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'))).some((c) => c.id === 'rt-cur-math'));
 
-    const updated = curriculumRepo.save({
+    const updated = await curriculumRepo.save({
       id: 'rt-cur-math',
       code: 'MATH-201',
       nameAr: 'رياضيات متقدمة',
@@ -294,11 +301,11 @@ export async function run(): Promise<number> {
       isActive: true,
       displayOrder: 2,
     });
-    check('curriculum update persisted', curriculumRepo.findById(new CurriculumId('rt-cur-math'))?.code === 'MATH-201');
+    check('curriculum update persisted', (await curriculumRepo.findById(new CurriculumId('rt-cur-math')))?.code === 'MATH-201');
     check('curriculum update returns record', updated?.code === 'MATH-201');
 
-    check('curriculum delete', curriculumRepo.delete(new CurriculumId('rt-cur-math')) === true);
-    check('curriculum delete persisted', curriculumRepo.findById(new CurriculumId('rt-cur-math')) === null);
+    check('curriculum delete', await curriculumRepo.delete(new CurriculumId('rt-cur-math')) === true);
+    check('curriculum delete persisted', await curriculumRepo.findById(new CurriculumId('rt-cur-math')) === null);
   }
 
   // ══════ 4. COURSE ASSIGNMENT PERSISTENCE ══════
@@ -306,20 +313,20 @@ export async function run(): Promise<number> {
 {
     // Seed valid FK parents (user -> teacher -> class) required by the
     // subjects FK (subjects.teacher_id -> teachers.id -> users.id).
-    ds.execute(
+    await ds.execute(
       "INSERT OR IGNORE INTO users (id, name, role, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
       ['rt-user-1', 'Teacher One', 'teacher', 't1@test.ye', 'hash', '0500000000', 'active']
     );
-    ds.execute(
+    await ds.execute(
       "INSERT OR IGNORE INTO teachers (id, user_id, name, email, phone, specialization, qualification, experience_years, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ['rt-tch-1', 'rt-user-1', 'Teacher One', 't1@test.ye', '0500000000', 'Math', 'BSc', 5, 'active']
     );
-    ds.execute(
+    await ds.execute(
       "INSERT OR IGNORE INTO school_classes (id, name, level) VALUES (?, ?, ?)",
       ['rt-cls-1', 'Grade 7', 7]
     );
 
-    const saved = caRepo.save({
+    const saved = await caRepo.save({
       id: 'rt-ca-1',
       subjectId: 'rt-subj-1',
       teacherId: 'rt-tch-1',
@@ -328,16 +335,16 @@ export async function run(): Promise<number> {
       isActive: true,
     });
     check('course assignment save returns record', saved !== null);
-    check('course assignment row in subjects', ds.exists('SELECT 1 FROM subjects WHERE id = ?', ['rt-ca-1']));
-    const byId = caRepo.findById(new CourseAssignmentId('rt-ca-1'));
+    check('course assignment row in subjects', await ds.exists('SELECT 1 FROM subjects WHERE id = ?', ['rt-ca-1']));
+    const byId = await caRepo.findById(new CourseAssignmentId('rt-ca-1'));
     check('course assignment findById', byId?.subjectId === 'rt-subj-1');
     check('course assignment weeklyPeriods', byId?.weeklyPeriods === 4);
     check('course assignment teacherId', byId?.teacherId === 'rt-tch-1');
-    check('course assignment getBySubject', caRepo.getBySubject(new SubjectId('rt-subj-1')).some((c) => c.id === 'rt-ca-1'));
-    check('course assignment getByTeacher', caRepo.getByTeacher(new TeacherId('rt-tch-1')).some((c) => c.id === 'rt-ca-1'));
-    check('course assignment getByGradeLevel', caRepo.getByGradeLevel(new GradeLevelId('rt-cls-1')).some((c) => c.id === 'rt-ca-1'));
+    check('course assignment getBySubject', (await caRepo.getBySubject(new SubjectId('rt-subj-1'))).some((c) => c.id === 'rt-ca-1'));
+    check('course assignment getByTeacher', (await caRepo.getByTeacher(new TeacherId('rt-tch-1'))).some((c) => c.id === 'rt-ca-1'));
+    check('course assignment getByGradeLevel', (await caRepo.getByGradeLevel(new GradeLevelId('rt-cls-1'))).some((c) => c.id === 'rt-ca-1'));
 
-    const updated = caRepo.save({
+    const updated = await caRepo.save({
       id: 'rt-ca-1',
       subjectId: 'rt-subj-1',
       teacherId: 'rt-tch-1',
@@ -345,51 +352,45 @@ export async function run(): Promise<number> {
       weeklyPeriods: 5,
       isActive: true,
     });
-    check('course assignment update persisted', caRepo.findById(new CourseAssignmentId('rt-ca-1'))?.weeklyPeriods === 5);
+    check('course assignment update persisted', (await caRepo.findById(new CourseAssignmentId('rt-ca-1')))?.weeklyPeriods === 5);
 
-    check('course assignment delete', caRepo.delete(new CourseAssignmentId('rt-ca-1')) === true);
-    check('course assignment delete persisted', caRepo.findById(new CourseAssignmentId('rt-ca-1')) === null);
+    check('course assignment delete', await caRepo.delete(new CourseAssignmentId('rt-ca-1')) === true);
+    check('course assignment delete persisted', await caRepo.findById(new CourseAssignmentId('rt-ca-1')) === null);
   }
 
   // ══════ 5. ACADEMIC CALENDAR PERSISTENCE ══════
   console.log('\n[5] AcademicCalendar persistence');
   {
-// Seed a schedule_periods row with valid FK parents.
-    ds.execute(
-      "INSERT OR IGNORE INTO users (id, name, role, email, password_hash, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      ['rt-user-2', 'Teacher Two', 'teacher', 't2@test.ye', 'hash', '0500000001', 'active']
-    );
-    ds.execute(
-      "INSERT OR IGNORE INTO teachers (id, user_id, name, email, phone, specialization, qualification, experience_years, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      ['rt-tch-2', 'rt-user-2', 'Teacher Two', 't2@test.ye', '0500000001', 'Science', 'BSc', 4, 'active']
-    );
-    ds.execute("INSERT OR IGNORE INTO school_classes (id, name, level) VALUES (?, ?, ?)", ['rt-cls-2', 'Grade 8', 8]);
-    ds.execute("INSERT OR IGNORE INTO sections (id, name, class_id, room_number, capacity) VALUES (?, ?, ?, ?, ?)", ['rt-sec-2', 'A', 'rt-cls-2', 'R101', 30]);
-    ds.execute("INSERT OR IGNORE INTO subjects (id, name, code, class_id, teacher_id, weekly_hours, max_score, pass_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ['rt-subj-2', 'Sci', 'SCI101', 'rt-cls-2', 'rt-tch-2', 3, 100, 50]);
-
-    // Insert a schedule_periods row with an ISO date (Calendar uses dates).
-    ds.execute(
-      "INSERT INTO schedule_periods (id, class_id, section_id, subject_id, teacher_id, day, period_number, start_time, end_time, academic_week) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      ['rt-day-1', 'rt-cls-2', 'rt-sec-2', 'rt-subj-2', 'rt-tch-2', '2025-09-01', 1, '07:30', '08:15', 1]
-    );
-
-    const saved = calRepo.save({
+    // New-record INSERT: the dedicated academic_calendar_days table requires
+    // no timetable FK parents, so a brand-new day must persist on first save.
+    const created = await calRepo.save({
       id: 'rt-day-1',
       date: '2025-09-01',
       isInstructional: true,
       academicWeek: 1,
     });
-    check('academic calendar update returns record', saved !== null);
-    check('academic calendar update date', saved?.date === '2025-09-01');
-    check('academic calendar row persists date in day column', ds.exists("SELECT 1 FROM schedule_periods WHERE id = ? AND day = ?", ['rt-day-1', '2025-09-01']));
+    check('academic calendar new-record insert returns record', created !== null);
+    check('academic calendar new-record insert date', created?.date === '2025-09-01');
+    check('academic calendar new-record insert persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ? AND day = ?', ['rt-day-1', '2025-09-01']));
 
-    const byDate = calRepo.findByDate(new AcademicCalendarDate(new Date('2025-09-01')));
+    // Update path: same id → UPDATE the existing row (week + instructional flag).
+    const updated = await calRepo.save({
+      id: 'rt-day-1',
+      date: '2025-09-01',
+      isInstructional: false,
+      academicWeek: 2,
+    });
+    check('academic calendar update returns record', updated !== null);
+    check('academic calendar update persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ? AND academic_week = 2 AND is_instructional = 0', ['rt-day-1']));
+
+    const byDate = await calRepo.findByDate(new AcademicCalendarDate(new Date('2025-09-01')));
     check('academic calendar findByDate', byDate?.id === 'rt-day-1');
-    check('academic calendar getByWeek(1)', calRepo.getByWeek(new AcademicWeek(1)).some((c) => c.id === 'rt-day-1'));
-    check('academic calendar getAll', calRepo.getAll().some((c) => c.id === 'rt-day-1'));
+    check('academic calendar findByDate non-instructional', byDate?.isInstructional === false);
+    check('academic calendar getByWeek(2)', (await calRepo.getByWeek(new AcademicWeek(2))).some((c) => c.id === 'rt-day-1'));
+    check('academic calendar getAll', (await calRepo.getAll()).some((c) => c.id === 'rt-day-1'));
 
-    check('academic calendar delete', calRepo.delete(new SchoolDayId('rt-day-1')) === true);
-    check('academic calendar delete persisted', ds.exists('SELECT 1 FROM schedule_periods WHERE id = ?', ['rt-day-1']) === false);
+    check('academic calendar delete', await calRepo.delete(new SchoolDayId('rt-day-1')) === true);
+    check('academic calendar delete persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', ['rt-day-1']) === false);
   }
 
   // ══════ 6. UNITOFWORK TRANSACTION ROLLBACK ══════
@@ -411,17 +412,17 @@ export async function run(): Promise<number> {
       }),
       'runtime-verify'
     );
-    yearRepo.save(year);
-    check('year + term persisted in transaction', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-ay-txn']) && ds.exists('SELECT 1 FROM academic_terms WHERE id = ?', ['rt-txn-term']));
+    await yearRepo.save(year);
+    check('year + term persisted in transaction', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-ay-txn']) && await ds.exists('SELECT 1 FROM academic_terms WHERE id = ?', ['rt-txn-term']));
 
 // Force failure by inserting two rows with the same UNIQUE code. The second
     // INSERT violates the UNIQUE constraint, which must roll back the first.
     const uow = new UnitOfWork(ds);
     uow.register('INSERT INTO academic_years (id, code, name_ar, start_date, end_date) VALUES (?, ?, ?, ?, ?)', ['rt-fail1', 'RT-UNIQUE-1', 'F1', '2023-09-01', '2024-06-30']);
     uow.register('INSERT INTO academic_years (id, code, name_ar, start_date, end_date) VALUES (?, ?, ?, ?, ?)', ['rt-fail2', 'RT-UNIQUE-1', 'F2', '2023-09-01', '2024-06-30']);
-    const result = uow.commit();
+    const result = await uow.commit();
     check('transaction fails on constraint violation', result.success === false);
-    check('no partial insert persisted after rollback', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-fail1']) === false && ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-fail2']) === false);
+    check('no partial insert persisted after rollback', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-fail1']) === false && await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['rt-fail2']) === false);
   }
 
   // ══════ 7. NO TABLE / COLUMN NOT FOUND ERRORS ══════

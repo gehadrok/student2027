@@ -23,9 +23,9 @@ export class SQLiteCourseAssignmentRepository implements ICourseAssignmentReposi
     this.unitOfWork = unitOfWork || new UnitOfWork(this.dataSource);
   }
 
-  save(record: CourseAssignmentRecord): CourseAssignmentRecord | null {
+  async save(record: CourseAssignmentRecord): Promise<CourseAssignmentRecord | null> {
     const row = courseAssignmentRecordToRow(record);
-    const existing = this.dataSource.exists(
+    const existing = await this.dataSource.exists(
       'SELECT 1 FROM subjects WHERE id = ?',
       [row.id]
     );
@@ -48,7 +48,7 @@ export class SQLiteCourseAssignmentRepository implements ICourseAssignmentReposi
       );
     }
 
-    const result = this.unitOfWork.commit();
+    const result = await this.unitOfWork.commit();
     if (!result.success) {
       throw new Error(`CourseAssignment save failed: ${result.error || 'unknown'}`);
     }
@@ -56,53 +56,51 @@ export class SQLiteCourseAssignmentRepository implements ICourseAssignmentReposi
     return this.findById(new CourseAssignmentId(record.id));
   }
 
-  findById(id: CourseAssignmentId): CourseAssignmentRecord | null {
-    const row = this.dataSource.queryOne<CourseAssignmentRow>(
+  async findById(id: CourseAssignmentId): Promise<CourseAssignmentRecord | null> {
+    const row = await this.dataSource.queryOne<CourseAssignmentRow>(
       'SELECT * FROM subjects WHERE id = ?',
       [id.toString()]
     );
     return row ? courseAssignmentRowToRecord(row) : null;
   }
 
-  getBySubject(subjectId: SubjectId): CourseAssignmentRecord[] {
-    return this.dataSource
-      .query<CourseAssignmentRow>('SELECT * FROM subjects WHERE subject_id = ?', [
-        subjectId.toString(),
-      ])
-      .map(courseAssignmentRowToRecord);
+  async getBySubject(subjectId: SubjectId): Promise<CourseAssignmentRecord[]> {
+    const rows = await this.dataSource.query<CourseAssignmentRow>(
+      'SELECT * FROM subjects WHERE subject_id = ?',
+      [subjectId.toString()]
+    );
+    return rows.map(courseAssignmentRowToRecord);
   }
 
-  getByTeacher(teacherId: TeacherId): CourseAssignmentRecord[] {
-    return this.dataSource
-      .query<CourseAssignmentRow>('SELECT * FROM subjects WHERE teacher_id = ?', [
-        teacherId.toString(),
-      ])
-      .map(courseAssignmentRowToRecord);
+  async getByTeacher(teacherId: TeacherId): Promise<CourseAssignmentRecord[]> {
+    const rows = await this.dataSource.query<CourseAssignmentRow>(
+      'SELECT * FROM subjects WHERE teacher_id = ?',
+      [teacherId.toString()]
+    );
+    return rows.map(courseAssignmentRowToRecord);
   }
 
-  getByGradeLevel(gradeLevelId: GradeLevelId): CourseAssignmentRecord[] {
-    return this.dataSource
-      .query<CourseAssignmentRow>('SELECT * FROM subjects WHERE class_id = ?', [
-        gradeLevelId.toString(),
-      ])
-      .map(courseAssignmentRowToRecord);
+  async getByGradeLevel(gradeLevelId: GradeLevelId): Promise<CourseAssignmentRecord[]> {
+    const rows = await this.dataSource.query<CourseAssignmentRow>(
+      'SELECT * FROM subjects WHERE class_id = ?',
+      [gradeLevelId.toString()]
+    );
+    return rows.map(courseAssignmentRowToRecord);
   }
 
-  getByCurriculum(curriculumId: CurriculumId): CourseAssignmentRecord[] {
+  async getByCurriculum(curriculumId: CurriculumId): Promise<CourseAssignmentRecord[]> {
     void curriculumId;
-    return this.dataSource
-      .query<CourseAssignmentRow>('SELECT * FROM subjects')
-      .map(courseAssignmentRowToRecord);
+    const rows = await this.dataSource.query<CourseAssignmentRow>('SELECT * FROM subjects');
+    return rows.map(courseAssignmentRowToRecord);
   }
 
-  getAll(): CourseAssignmentRecord[] {
-    return this.dataSource
-      .query<CourseAssignmentRow>('SELECT * FROM subjects')
-      .map(courseAssignmentRowToRecord);
+  async getAll(): Promise<CourseAssignmentRecord[]> {
+    const rows = await this.dataSource.query<CourseAssignmentRow>('SELECT * FROM subjects');
+    return rows.map(courseAssignmentRowToRecord);
   }
 
-  delete(id: CourseAssignmentId): boolean {
-    const result = this.dataSource.execute('DELETE FROM subjects WHERE id = ?', [
+  async delete(id: CourseAssignmentId): Promise<boolean> {
+    const result = await this.dataSource.execute('DELETE FROM subjects WHERE id = ?', [
       id.toString(),
     ]);
     return result.changes > 0;

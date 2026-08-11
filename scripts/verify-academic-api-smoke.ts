@@ -33,6 +33,7 @@ class InMemoryDataSource implements IDataSource {
 
   tableName(sql: string): string {
     const m = sql.toLowerCase();
+    if (m.includes('academic_calendar_days')) return 'academic_calendar_days';
     if (m.includes('academic_years')) return 'academic_years';
     if (m.includes('academic_terms')) return 'academic_terms';
     if (m.includes('subjects_master')) return 'subjects_master';
@@ -42,13 +43,13 @@ class InMemoryDataSource implements IDataSource {
   }
 
   store(): Map<string, Map<string, Record<string, any>>> {
-    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods']) {
+    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods', 'academic_calendar_days']) {
       if (!this.tables.has(t)) this.tables.set(t, new Map());
     }
     return this.tables;
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     let rows = Array.from(table.values());
@@ -59,12 +60,12 @@ class InMemoryDataSource implements IDataSource {
     return rows as unknown as T[];
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     const lower = sql.toLowerCase();
@@ -110,45 +111,45 @@ cols.forEach((c, i) => {
     return { changes: 0, lastInsertRowid: 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
       return { success: false, error: 'Simulated transaction failure' };
     }
     try {
-      this.beginTransaction();
-      for (const q of queries) this.execute(q.sql, q.params);
-      this.commit();
+      await this.beginTransaction();
+      for (const q of queries) await this.execute(q.sql, q.params);
+      await this.commit();
       return { success: true };
     } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       return { success: false, error: err?.message || 'Transaction failed' };
     }
   }
 
-  prepare(): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     return { run: () => undefined, free: () => undefined };
   }
 
-  count(sql: string, params?: any[]): number {
-    return this.query(sql, params).length;
+  async count(sql: string, params?: any[]): Promise<number> {
+    return (await this.query(sql, params)).length;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    return (await this.count(sql, params)) > 0;
   }
 
-  beginTransaction(): void {
+  async beginTransaction(): Promise<void> {
     this.txnActive = true;
     this.txnSnapshot = new Map();
     for (const [name, table] of this.store()) this.txnSnapshot.set(name, new Map(table));
   }
 
-  commit(): void {
+  async commit(): Promise<void> {
     this.txnActive = false;
   }
 
-  rollback(): void {
+  async rollback(): Promise<void> {
     if (this.txnActive && this.txnSnapshot.size > 0) {
       this.tables = this.txnSnapshot;
       this.txnActive = false;
@@ -185,7 +186,7 @@ export async function run(): Promise<number> {
   // ── 1. AcademicYearService commands ─────────────────────────────────────
   console.log('\n[1] AcademicYearService commands');
   {
-    const dto = yearService.create({
+    const dto = await yearService.create({
       id: 'app-ay-1',
       code: '2026-2027',
       schoolScopeId: 'scope-1',
@@ -196,20 +197,20 @@ export async function run(): Promise<number> {
     check('create returns draft DTO', dto.status === 'draft');
     check('create returns code', dto.code === '2026-2027');
 
-    const loaded = yearService.getById({ id: 'app-ay-1' });
+    const loaded = await yearService.getById({ id: 'app-ay-1' });
     check('getById returns persisted DTO', loaded.id === 'app-ay-1');
 
-    const byCode = yearService.getByCode({ code: '2026-2027' });
+    const byCode = await yearService.getByCode({ code: '2026-2027' });
     check('getByCode returns DTO', byCode.id === 'app-ay-1');
 
-    const list = yearService.list({});
+    const list = await yearService.list({});
     check('list returns DTOs', list.some((y) => y.id === 'app-ay-1'));
   }
 
   // ── 2. AcademicYear lifecycle via UseCases ─────────────────────────────
   console.log('\n[2] AcademicYear lifecycle via use-cases');
   {
-    const dto = useCases.createWithTerms({
+    const dto = await useCases.createWithTerms({
       year: {
         id: 'app-ay-2',
         code: '2025-2026',
@@ -230,23 +231,23 @@ export async function run(): Promise<number> {
     check('createWithTerms returns year', dto.status === 'draft');
     check('createWithTerms adds term', dto.terms.length === 1);
 
-    const approved = useCases.approve({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
+    const approved = await useCases.approve({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
     check('approve transitions to approved', approved.status === 'approved');
 
-    const active = useCases.activate({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
+    const active = await useCases.activate({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
     check('activate transitions to active', active.status === 'active');
 
-    const closed = useCases.close({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
+    const closed = await useCases.close({ academicYearId: 'app-ay-2', changedBy: 'smoke-runner' });
     check('close transitions to closed', closed.status === 'closed');
 
-    const archived = useCases.archive({ academicYearId: 'app-ay-2', reason: 'cycle end', changedBy: 'smoke-runner' });
+    const archived = await useCases.archive({ academicYearId: 'app-ay-2', reason: 'cycle end', changedBy: 'smoke-runner' });
     check('archive transitions to archived', archived.status === 'archived');
   }
 
   // ── 3. Term operations via service ─────────────────────────────────────
   console.log('\n[3] AcademicTerm operations via service');
   {
-    const dto = yearService.addTerm({
+    const dto = await yearService.addTerm({
       academicYearId: 'app-ay-1',
       id: 'app-term-x',
       code: 'S2',
@@ -256,17 +257,17 @@ export async function run(): Promise<number> {
     });
     check('addTerm returns year with term', dto.terms.some((t) => t.id === 'app-term-x'));
 
-    const opened = yearService.openTerm({ academicYearId: 'app-ay-1', termId: 'app-term-x', changedBy: 'smoke-runner' });
+    const opened = await yearService.openTerm({ academicYearId: 'app-ay-1', termId: 'app-term-x', changedBy: 'smoke-runner' });
     check('openTerm sets status open', opened.terms.find((t: any) => t.id === 'app-term-x')?.status === 'open');
 
-    const closed = yearService.closeTerm({ academicYearId: 'app-ay-1', termId: 'app-term-x', changedBy: 'smoke-runner' });
+    const closed = await yearService.closeTerm({ academicYearId: 'app-ay-1', termId: 'app-term-x', changedBy: 'smoke-runner' });
     check('closeTerm sets status closed', closed.terms.find((t: any) => t.id === 'app-term-x')?.status === 'closed');
   }
 
   // ── 4. CurriculumService ───────────────────────────────────────────────
   console.log('\n[4] CurriculumService');
   {
-    const dto = curriculumService.save({
+    const dto = await curriculumService.save({
       id: 'app-cur-1',
       code: 'SCI-201',
       nameAr: 'علوم',
@@ -277,22 +278,22 @@ export async function run(): Promise<number> {
     });
     check('curriculum save returns DTO', dto.code === 'SCI-201');
 
-    const found = curriculumService.getById({ id: 'app-cur-1' });
+    const found = await curriculumService.getById({ id: 'app-cur-1' });
     check('curriculum getById', found.nameAr === 'علوم');
 
-    const byCode = curriculumService.getByCode({ code: 'SCI-201' });
+    const byCode = await curriculumService.getByCode({ code: 'SCI-201' });
     check('curriculum getByCode', byCode.id === 'app-cur-1');
 
-    const byGrade = curriculumService.list({ gradeLevelId: 'grade-8' });
+    const byGrade = await curriculumService.list({ gradeLevelId: 'grade-8' });
     check('curriculum list by grade', byGrade.some((c) => c.id === 'app-cur-1'));
 
-    check('curriculum delete', curriculumService.delete({ id: 'app-cur-1' }) === true);
+    check('curriculum delete', await curriculumService.delete({ id: 'app-cur-1' }) === true);
   }
 
   // ── 5. CourseAssignmentService ─────────────────────────────────────────
   console.log('\n[5] CourseAssignmentService');
   {
-    const dto = caService.save({
+    const dto = await caService.save({
       id: 'app-ca-1',
       subjectId: 'subj-1',
       teacherId: 'tch-1',
@@ -302,36 +303,36 @@ export async function run(): Promise<number> {
     });
     check('course assignment save returns DTO', dto.id === 'app-ca-1');
 
-    const found = caService.getById({ id: 'app-ca-1' });
+    const found = await caService.getById({ id: 'app-ca-1' });
     check('course assignment getById', found.teacherId === 'tch-1');
 
-    const byTeacher = caService.list({ teacherId: 'tch-1' });
+    const byTeacher = await caService.list({ teacherId: 'tch-1' });
     check('course assignment list by teacher', byTeacher.some((x) => x.id === 'app-ca-1'));
 
-    check('course assignment delete', caService.delete({ id: 'app-ca-1' }) === true);
+    check('course assignment delete', await caService.delete({ id: 'app-ca-1' }) === true);
   }
 
   // ── 6. AcademicCalendarService ─────────────────────────────────────────
   console.log('\n[6] AcademicCalendarService');
   {
-    // Seed a schedule_periods row so the update path is exercised.
-    ds.execute('INSERT INTO schedule_periods (id, day, academic_week) VALUES (?, ?, ?)', ['app-day-1', '2027-09-01', 1]);
-
-    const dto = calService.save({
+    // New-record save: INSERT path persists into academic_calendar_days.
+    const dto = await calService.save({
       id: 'app-day-1',
       date: '2027-09-01',
       isInstructional: true,
       academicWeek: 1,
     });
     check('academic calendar save returns DTO', dto.date === '2027-09-01');
+    check('academic calendar save persists new day', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', ['app-day-1']));
 
-    const byDate = calService.getByDate({ date: '2027-09-01' });
+    const byDate = await calService.getByDate({ date: '2027-09-01' });
     check('academic calendar getByDate', byDate.id === 'app-day-1');
 
-    const byWeek = calService.list({ week: 1 });
+    const byWeek = await calService.list({ week: 1 });
     check('academic calendar list by week', byWeek.some((x) => x.id === 'app-day-1'));
 
-    check('academic calendar delete', calService.delete({ id: 'app-day-1' }) === true);
+    check('academic calendar delete', await calService.delete({ id: 'app-day-1' }) === true);
+    check('academic calendar delete persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', ['app-day-1']) === false);
   }
 
   console.log(`\n=== RESULT: ${passed} passed, ${failures} failed ===`);

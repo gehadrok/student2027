@@ -37,6 +37,7 @@ class InMemoryDataSource implements IDataSource {
 
   tableName(sql: string): string {
     const m = sql.toLowerCase();
+    if (m.includes('academic_calendar_days')) return 'academic_calendar_days';
     if (m.includes('academic_years')) return 'academic_years';
     if (m.includes('academic_terms')) return 'academic_terms';
     if (m.includes('subjects_master')) return 'subjects_master';
@@ -46,13 +47,13 @@ class InMemoryDataSource implements IDataSource {
   }
 
   store(): Map<string, Map<string, Record<string, any>>> {
-    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods']) {
+    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods', 'academic_calendar_days']) {
       if (!this.tables.has(t)) this.tables.set(t, new Map());
     }
     return this.tables;
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     let rows = Array.from(table.values());
@@ -63,12 +64,12 @@ class InMemoryDataSource implements IDataSource {
     return rows as unknown as T[];
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     const lower = sql.toLowerCase();
@@ -123,45 +124,45 @@ class InMemoryDataSource implements IDataSource {
     return { changes: 0, lastInsertRowid: 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
       return { success: false, error: 'Simulated transaction failure' };
     }
     try {
-      this.beginTransaction();
-      for (const q of queries) this.execute(q.sql, q.params);
-      this.commit();
+      await this.beginTransaction();
+      for (const q of queries) await this.execute(q.sql, q.params);
+      await this.commit();
       return { success: true };
     } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       return { success: false, error: err?.message || 'Transaction failed' };
     }
   }
 
-  prepare(): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     return { run: () => undefined, free: () => undefined };
   }
 
-  count(sql: string, params?: any[]): number {
-    return this.query(sql, params).length;
+  async count(sql: string, params?: any[]): Promise<number> {
+    return (await this.query(sql, params)).length;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    return (await this.count(sql, params)) > 0;
   }
 
-  beginTransaction(): void {
+  async beginTransaction(): Promise<void> {
     this.txnActive = true;
     this.txnSnapshot = new Map();
     for (const [name, table] of this.store()) this.txnSnapshot.set(name, new Map(table));
   }
 
-  commit(): void {
+  async commit(): Promise<void> {
     this.txnActive = false;
   }
 
-  rollback(): void {
+  async rollback(): Promise<void> {
     if (this.txnActive && this.txnSnapshot.size > 0) {
       this.tables = this.txnSnapshot;
       this.txnActive = false;
@@ -479,9 +480,8 @@ export async function run(): Promise<number> {
     const CAL_ID = 'http-day-1';
     const CAL_DATE = '2027-09-01';
     {
-      // Seed a schedule_periods row so the update path is exercised.
-      ds.execute('INSERT INTO schedule_periods (id, day, academic_week) VALUES (?, ?, ?)', [CAL_ID, CAL_DATE, 1]);
-
+      // New-record POST: INSERT path (no pre-seed needed — the dedicated
+      // academic_calendar_days table accepts the day directly).
       const created = await request(base, 'POST', '/api/academic/calendar', {
         id: CAL_ID,
         date: CAL_DATE,
@@ -489,6 +489,7 @@ export async function run(): Promise<number> {
         academicWeek: 1,
       });
       check('POST /academic/calendar → 201', created.status === 201, `got ${created.status}`);
+      check('POST persists new day row', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', [CAL_ID]));
 
       const byDate = await request(base, 'GET', `/api/academic/calendar/date/${CAL_DATE}`);
       check('GET /calendar/date/:date → 200', byDate.status === 200, `got ${byDate.status}`);

@@ -3,6 +3,7 @@ import { UnitOfWork } from '../src/core/datasource/UnitOfWork';
 import { EventBus } from '../src/core/events/EventBus';
 import { SQLiteAcademicYearRepository } from '../src/modules/academic/infrastructure/repositories/SQLiteAcademicYearRepository';
 import { AcademicYearService } from '../src/modules/academic/application/services/AcademicYearService';
+import { AcademicYearId } from '../src/modules/academic/domain/value-objects/AcademicYearId';
 
 class InMemoryDataSource implements IDataSource {
   private tables: Map<string, Map<string, Record<string, any>>> = new Map();
@@ -27,7 +28,7 @@ class InMemoryDataSource implements IDataSource {
     return this.tables;
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     let rows = Array.from(table.values());
@@ -38,12 +39,12 @@ class InMemoryDataSource implements IDataSource {
     return rows as unknown as T[];
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     const lower = sql.toLowerCase();
@@ -87,34 +88,34 @@ class InMemoryDataSource implements IDataSource {
     return { changes: 0, lastInsertRowid: 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
       return { success: false, error: 'Simulated transaction failure' };
     }
     try {
-      this.beginTransaction();
-      for (const q of queries) this.execute(q.sql, q.params);
-      this.commit();
+      await this.beginTransaction();
+      for (const q of queries) await this.execute(q.sql, q.params);
+      await this.commit();
       return { success: true };
     } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       return { success: false, error: err?.message || 'Transaction failed' };
     }
   }
 
-  prepare(): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     return { run: () => undefined, free: () => undefined };
   }
-  count(sql: string, params?: any[]): number { return this.query(sql, params).length; }
-  exists(sql: string, params?: any[]): boolean { return this.count(sql, params) > 0; }
-  beginTransaction(): void {
+  async count(sql: string, params?: any[]): Promise<number> { return (await this.query(sql, params)).length; }
+  async exists(sql: string, params?: any[]): Promise<boolean> { return (await this.count(sql, params)) > 0; }
+  async beginTransaction(): Promise<void> {
     this.txnActive = true;
     this.txnSnapshot = new Map();
     for (const [name, table] of this.store()) this.txnSnapshot.set(name, new Map(table));
   }
-  commit(): void { this.txnActive = false; }
-  rollback(): void {
+  async commit(): Promise<void> { this.txnActive = false; }
+  async rollback(): Promise<void> {
     if (this.txnActive && this.txnSnapshot.size > 0) {
       this.tables = this.txnSnapshot;
       this.txnActive = false;
@@ -122,12 +123,13 @@ class InMemoryDataSource implements IDataSource {
   }
 }
 
+async function main(): Promise<void> {
 const ds = new InMemoryDataSource();
 const eventBus = EventBus.getInstance();
 eventBus.clear();
 const yearService = new AcademicYearService(new SQLiteAcademicYearRepository(ds, new UnitOfWork(ds), eventBus));
 
-const dto = yearService.create({
+const dto = await yearService.create({
   id: 'app-ay-2',
   code: '2025-2026',
   schoolScopeId: 'scope-1',
@@ -144,17 +146,16 @@ for (const [k, v] of yrTable.entries()) {
 }
 
 // Direct findById reconstruction check
-import { AcademicYearId } from '../src/modules/academic/domain/value-objects/AcademicYearId';
 const yearRepo = new SQLiteAcademicYearRepository(ds, new UnitOfWork(ds), eventBus);
 try {
-  const y = yearRepo.findById(new AcademicYearId('app-ay-2'));
+  const y = await yearRepo.findById(new AcademicYearId('app-ay-2'));
   console.log('DIRECT findById OK, status =', y?.status, 'startDate =', y?.dateRange.startDate.toISOString());
 } catch (err: any) {
   console.log('DIRECT findById FAILED:', err.message);
 }
 
 try {
-  const dto2 = yearService.addTerm({
+  const dto2 = await yearService.addTerm({
     academicYearId: 'app-ay-2',
     id: 'app-term-1',
     code: 'F1',
@@ -168,3 +169,9 @@ try {
 }
 
 console.log('DONE');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

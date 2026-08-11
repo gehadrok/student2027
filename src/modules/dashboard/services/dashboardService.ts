@@ -29,63 +29,63 @@ export class DashboardService {
   /**
    * Get aggregated KPIs for the dashboard.
    */
-  getKpis(): DashboardKpis {
+  async getKpis(): Promise<DashboardKpis> {
     return this.dashboardRepo.getKpis();
   }
 
   /**
    * Get top-performing students.
    */
-  getTopStudents(limit: number = 5): TopStudent[] {
+  async getTopStudents(limit: number = 5): Promise<TopStudent[]> {
     return this.dashboardRepo.getTopStudents(limit);
   }
 
   /**
    * Get struggling / at-risk students.
    */
-  getStrugglingStudents(): StrugglingStudent[] {
+  async getStrugglingStudents(): Promise<StrugglingStudent[]> {
     return this.dashboardRepo.getStrugglingStudents();
   }
 
   /**
    * Get classes sorted by highest absence rates.
    */
-  getMostAbsentClasses(): ClassAbsence[] {
+  async getMostAbsentClasses(): Promise<ClassAbsence[]> {
     return this.dashboardRepo.getMostAbsentClasses();
   }
 
   /**
    * Get student distribution across classes (for chart).
    */
-  getClassDistribution(): { name: string; count: number }[] {
+  async getClassDistribution(): Promise<{ name: string; count: number }[]> {
     return this.dashboardRepo.getClassDistribution();
   }
 
   /**
    * Get attendance status breakdown (for pie chart).
    */
-  getAttendanceBreakdown(): { name: string; value: number; color: string }[] {
+  async getAttendanceBreakdown(): Promise<{ name: string; value: number; color: string }[]> {
     return this.dashboardRepo.getAttendanceBreakdown();
   }
 
   /**
    * Get app notifications.
    */
-  getNotifications(): AppNotification[] {
+  async getNotifications(): Promise<AppNotification[]> {
     return this.dashboardRepo.getNotifications();
   }
 
   /**
    * Get school settings.
    */
-  getSettings(): SchoolSettings {
+  async getSettings(): Promise<SchoolSettings> {
     return this.dashboardRepo.getSettings();
   }
 
   /**
    * Get upcoming exams (static data for now — will be replaced with DB query).
    */
-  getUpcomingExams(): UpcomingExam[] {
+  async getUpcomingExams(): Promise<UpcomingExam[]> {
     return [
       {
         id: 'ex1',

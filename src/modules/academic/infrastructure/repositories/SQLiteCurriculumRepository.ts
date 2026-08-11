@@ -22,9 +22,9 @@ export class SQLiteCurriculumRepository implements ICurriculumRepository {
     this.unitOfWork = unitOfWork || new UnitOfWork(this.dataSource);
   }
 
-  save(record: CurriculumRecord): CurriculumRecord | null {
+  async save(record: CurriculumRecord): Promise<CurriculumRecord | null> {
     const row = curriculumRecordToRow(record);
-    const existing = this.dataSource.exists(
+    const existing = await this.dataSource.exists(
       'SELECT 1 FROM subjects_master WHERE id = ?',
       [row.id]
     );
@@ -66,7 +66,7 @@ export class SQLiteCurriculumRepository implements ICurriculumRepository {
       );
     }
 
-    const result = this.unitOfWork.commit();
+    const result = await this.unitOfWork.commit();
     if (!result.success) {
       throw new Error(`Curriculum save failed: ${result.error || 'unknown'}`);
     }
@@ -74,47 +74,48 @@ export class SQLiteCurriculumRepository implements ICurriculumRepository {
     return this.findById(new CurriculumId(record.id));
   }
 
-  findById(id: CurriculumId): CurriculumRecord | null {
-    const row = this.dataSource.queryOne<CurriculumRow>(
+  async findById(id: CurriculumId): Promise<CurriculumRecord | null> {
+    const row = await this.dataSource.queryOne<CurriculumRow>(
       'SELECT * FROM subjects_master WHERE id = ?',
       [id.toString()]
     );
     return row ? curriculumRowToRecord(row) : null;
   }
 
-  findByCode(code: CurriculumCode): CurriculumRecord | null {
-    const row = this.dataSource.queryOne<CurriculumRow>(
+  async findByCode(code: CurriculumCode): Promise<CurriculumRecord | null> {
+    const row = await this.dataSource.queryOne<CurriculumRow>(
       'SELECT * FROM subjects_master WHERE code = ?',
       [code.toString()]
     );
     return row ? curriculumRowToRecord(row) : null;
   }
 
-  getByStage(stageId: EducationStageId): CurriculumRecord[] {
+  async getByStage(stageId: EducationStageId): Promise<CurriculumRecord[]> {
     void stageId;
-    return this.dataSource
-      .query<CurriculumRow>('SELECT * FROM subjects_master ORDER BY display_order ASC')
-      .map(curriculumRowToRecord);
+    const rows = await this.dataSource.query<CurriculumRow>(
+      'SELECT * FROM subjects_master ORDER BY display_order ASC'
+    );
+    return rows.map(curriculumRowToRecord);
   }
 
-  getByGradeLevel(gradeLevelId: GradeLevelId): CurriculumRecord[] {
-    return this.dataSource
-      .query<CurriculumRow>(
-        'SELECT * FROM subjects_master WHERE grade_level_id = ? ORDER BY display_order ASC',
-        [gradeLevelId.toString()]
-      )
-      .map(curriculumRowToRecord);
+  async getByGradeLevel(gradeLevelId: GradeLevelId): Promise<CurriculumRecord[]> {
+    const rows = await this.dataSource.query<CurriculumRow>(
+      'SELECT * FROM subjects_master WHERE grade_level_id = ? ORDER BY display_order ASC',
+      [gradeLevelId.toString()]
+    );
+    return rows.map(curriculumRowToRecord);
   }
 
-  getAll(activeOnly: boolean = true): CurriculumRecord[] {
+  async getAll(activeOnly: boolean = true): Promise<CurriculumRecord[]> {
     const sql = activeOnly
       ? 'SELECT * FROM subjects_master WHERE is_active = 1 ORDER BY display_order ASC'
       : 'SELECT * FROM subjects_master ORDER BY display_order ASC';
-    return this.dataSource.query<CurriculumRow>(sql).map(curriculumRowToRecord);
+    const rows = await this.dataSource.query<CurriculumRow>(sql);
+    return rows.map(curriculumRowToRecord);
   }
 
-  delete(id: CurriculumId): boolean {
-    const result = this.dataSource.execute(
+  async delete(id: CurriculumId): Promise<boolean> {
+    const result = await this.dataSource.execute(
       'DELETE FROM subjects_master WHERE id = ?',
       [id.toString()]
     );

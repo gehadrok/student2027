@@ -3,8 +3,8 @@ import { Student } from '../../../types';
 import { StudentFilter } from '../types';
 
 export class StudentService {
-  getFilteredStudents(filter: StudentFilter): Student[] {
-    let students = studentRepository.getAll();
+  async getFilteredStudents(filter: StudentFilter): Promise<Student[]> {
+    let students = await studentRepository.getAll();
 
     if (filter.classId && filter.classId !== 'all') {
       students = students.filter((s) => s.classId === filter.classId);
@@ -28,7 +28,7 @@ export class StudentService {
     return students;
   }
 
-  addStudent(studentData: Omit<Student, 'id' | 'userId'>): Student {
+  async addStudent(studentData: Omit<Student, 'id' | 'userId'>): Promise<Student> {
     const newStudent: Student = {
       ...studentData,
       id: 's_' + Date.now().toString(36),
@@ -37,8 +37,8 @@ export class StudentService {
     return studentRepository.save(newStudent);
   }
 
-  updateStudent(id: string, updateData: Partial<Student>): Student | undefined {
-    const existing = studentRepository.getById(id);
+  async updateStudent(id: string, updateData: Partial<Student>): Promise<Student | undefined> {
+    const existing = await studentRepository.getById(id);
     if (!existing) return undefined;
 
     const updated: Student = {
@@ -48,7 +48,7 @@ export class StudentService {
     return studentRepository.save(updated);
   }
 
-  deleteStudent(id: string): boolean {
+  async deleteStudent(id: string): Promise<boolean> {
     return studentRepository.delete(id);
   }
 }

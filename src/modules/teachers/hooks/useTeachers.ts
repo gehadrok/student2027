@@ -9,17 +9,15 @@ export const useTeachers = (initialFilter: TeacherFilter = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TeacherFilter>(initialFilter);
 
-  const fetchTeachers = useCallback(() => {
+  const fetchTeachers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setTimeout(() => {
-        const data = teacherService.getFilteredTeachers(filter);
-        setTeachers(data);
-        setIsLoading(false);
-      }, 100);
+      const data = await teacherService.getFilteredTeachers(filter);
+      setTeachers(data);
     } catch (err: any) {
       setError(err.message || 'خطأ في جلب بيانات الكادر التعليمي');
+    } finally {
       setIsLoading(false);
     }
   }, [filter]);
@@ -35,19 +33,19 @@ export const useTeachers = (initialFilter: TeacherFilter = {}) => {
     filter,
     setFilter,
     refetch: fetchTeachers,
-    addTeacher: (data: Omit<Teacher, 'id' | 'userId'>) => {
-      const res = teacherService.addTeacher(data);
-      fetchTeachers();
+    addTeacher: async (data: Omit<Teacher, 'id' | 'userId'>) => {
+      const res = await teacherService.addTeacher(data);
+      await fetchTeachers();
       return res;
     },
-    updateTeacher: (id: string, data: Partial<Teacher>) => {
-      const res = teacherService.updateTeacher(id, data);
-      fetchTeachers();
+    updateTeacher: async (id: string, data: Partial<Teacher>) => {
+      const res = await teacherService.updateTeacher(id, data);
+      await fetchTeachers();
       return res;
     },
-    deleteTeacher: (id: string) => {
-      const res = teacherService.deleteTeacher(id);
-      fetchTeachers();
+    deleteTeacher: async (id: string) => {
+      const res = await teacherService.deleteTeacher(id);
+      await fetchTeachers();
       return res;
     }
   };

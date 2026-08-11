@@ -2,14 +2,14 @@
  * Master Data Center - Main Screen
  * Full-featured enterprise master data management interface
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Database, Search, Filter, Plus, Upload, Download, Printer,
   ChevronLeft, ChevronRight, RotateCcw, Trash2, FileSpreadsheet,
   FileText, Activity, X, Check, AlertTriangle
 } from 'lucide-react';
 import { MASTER_DATA_CATEGORIES } from '../constants';
-import { MasterDataEntity, MasterDataEntityInfo, MasterDataCategory } from '../types';
+import { MasterDataEntity, MasterDataEntityInfo, MasterDataCategory, MasterDataAuditLog } from '../types';
 import { useMasterData } from '../hooks/useMasterData';
 import { ConfirmModal } from '../../../components/common/ConfirmModal';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -241,8 +241,8 @@ const MasterDataTableView: React.FC<{
     true
   );
 
-  const handleExport = (format: 'excel' | 'csv') => {
-    const { data: records, fileName } = exportData(format);
+  const handleExport = async (format: 'excel' | 'csv') => {
+    const { data: records, fileName } = await exportData(format);
     const headers = ['id', 'code', 'name_ar', 'name_en', 'description', 'is_active', 'display_order'];
     const csvContent = [
       headers.join(','),
@@ -501,13 +501,13 @@ const MasterDataTableView: React.FC<{
           entityInfo={entityInfo}
           editRecord={editRecord}
           onClose={closeForm}
-          onSave={(data) => {
+          onSave={async (data) => {
             if (editRecord) {
-              const result = handleUpdate(data);
+              const result = await handleUpdate(data);
               if (result.success) showToast('تم تحديث السجل بنجاح', 'success');
               else result.errors.forEach(e => showToast(e.message, 'error'));
             } else {
-              const result = handleCreate(data);
+              const result = await handleCreate(data);
               if (result.success) showToast('تم إضافة السجل بنجاح', 'success');
               else result.errors.forEach(e => showToast(e.message, 'error'));
             }
@@ -525,12 +525,12 @@ const MasterDataTableView: React.FC<{
         confirmLabel="حذف"
         cancelLabel="إلغاء"
         variant="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (showDeleteConfirm === 'bulk') {
-            handleBulkDelete();
+            await handleBulkDelete();
             showToast(`تم حذف ${selectedCount} سجل`, 'info');
           } else if (showDeleteConfirm) {
-            handleDelete(showDeleteConfirm);
+            await handleDelete(showDeleteConfirm);
             showToast('تم حذف السجل', 'info');
           }
           setShowDeleteConfirm(null);
@@ -724,7 +724,22 @@ const AuditLogModal: React.FC<{
   entityType: string;
   onClose: () => void;
 }> = ({ entityType, onClose }) => {
-  const logs = masterDataService.getAuditLogs(entityType, 30);
+  const [logs, setLogs] = useState<MasterDataAuditLog[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await masterDataService.getAuditLogs(entityType, 30);
+        if (!cancelled) setLogs(data);
+      } catch (err) {
+        console.error('Failed to load audit logs:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entityType]);
 
   const actionLabels: Record<string, { label: string; color: string }> = {
     CREATE: { label: 'إضافة', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
@@ -789,7 +804,7 @@ const ImportModal: React.FC<{
   const [importText, setImportText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setIsProcessing(true);
     try {
       // Parse CSV-like input
@@ -810,7 +825,7 @@ const ImportModal: React.FC<{
         return row;
       });
 
-      const result = masterDataService.importData(entityType, rows);
+      const result = await masterDataService.importData(entityType, rows);
       showToast(`تم استيراد ${result.success} سجل بنجاح، فشل ${result.failed}`, 
         result.failed > 0 ? 'warning' : 'success');
       if (result.errors.length > 0) {

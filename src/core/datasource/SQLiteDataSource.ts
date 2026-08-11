@@ -5,77 +5,81 @@
 
 import { IDataSource } from './IDataSource';
 import {
-  querySqlSync,
+  getSQLiteDB,
+  querySql,
   queryOneSql,
-  runSqlSync,
-  runTransactionSync,
-  beginTransaction,
-  commitTransaction,
-  rollbackTransaction,
+  runSql,
+  runTransaction,
 } from '../../lib/sqlite-engine';
 
 /**
  * SQLite implementation of IDataSource.
- * Wraps the existing sqlite-engine primitives into the generic interface.
+ * Wraps the async sqlite-engine primitives into the generic interface.
  */
 export class SQLiteDataSource implements IDataSource {
-  query<T = any>(sql: string, params?: any[]): T[] {
-    return querySqlSync<T>(sql, params || []);
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
+    return querySql<T>(sql, params || []);
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const results = this.query<T>(sql, params);
-    return results.length > 0 ? results[0] : null;
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    return queryOneSql<T>(sql, params || []);
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
-    runSqlSync(sql, params || []);
-    // runSqlSync doesn't return changes info, so we query it
-    const result = this.queryOne<{ cnt: number; id: number }>(
-      'SELECT changes() as cnt, last_insert_rowid() as id'
-    );
-    return {
-      changes: result?.cnt ?? 0,
-      lastInsertRowid: result?.id ?? 0,
-    };
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
+    return runSql(sql, params || []);
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
-    return runTransactionSync(queries);
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
+    return runTransaction(queries);
   }
 
-  prepare(sql: string): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(sql: string): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     // Delegate to sql.js prepare via the engine's getSQLiteDB
     // For simplicity, we use execute as a fallback
     return {
       run: (params?: any[]) => {
-        this.execute(sql, params);
+        void this.execute(sql, params);
       },
       free: () => {
-        // No-op for sync mode
+        // No-op for async mode
       },
     };
   }
 
-  count(sql: string, params?: any[]): number {
-    const result = this.queryOne<{ cnt: number }>(sql, params);
+  async count(sql: string, params?: any[]): Promise<number> {
+    const result = await this.queryOne<{ cnt: number }>(sql, params);
     return result?.cnt ?? 0;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    // Callers pass bare predicate queries such as `SELECT 1 FROM t WHERE id = ?`.
+    // Wrap them so we always read a `cnt` column instead of relying on the
+    // column name of the predicate itself.
+    try {
+      const result = await this.queryOne<{ cnt: number }>(
+        `SELECT COUNT(*) AS cnt FROM (${sql}) AS _sub`,
+        params
+      );
+      return (result?.cnt ?? 0) > 0;
+    } catch (err) {
+      console.error('exists() query failed:', sql, err);
+      return false;
+    }
   }
 
-  beginTransaction(): void {
-    beginTransaction();
+  async beginTransaction(): Promise<void> {
+    const db = await getSQLiteDB();
+    db.run('BEGIN TRANSACTION;');
   }
 
-  commit(): void {
-    commitTransaction();
+  async commit(): Promise<void> {
+    const db = await getSQLiteDB();
+    db.run('COMMIT;');
   }
 
-  rollback(): void {
-    rollbackTransaction();
+  async rollback(): Promise<void> {
+    const db = await getSQLiteDB();
+    db.run('ROLLBACK;');
   }
 }
 

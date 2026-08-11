@@ -23,30 +23,55 @@ function useMasterLookup<T extends MasterDataEntity>(
   const [records, setRecords] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchRecords = useCallback(() => {
+  const fetchRecords = useCallback(async () => {
     setIsLoading(true);
     try {
       const cacheKey = lookupCacheKey(entityType, activeOnly);
-      const data = masterDataCache.getOrCompute<T[]>(
-        cacheKey,
-        () => masterDataService.getAll<T>(entityType, activeOnly),
-        60_000 // 60 second TTL for lookups
-      );
-      setRecords(data);
+      const cached = masterDataCache.get<T[]>(cacheKey);
+      if (cached !== undefined) {
+        setRecords(cached);
+      } else {
+        const data = await masterDataService.getAll<T>(entityType, activeOnly);
+        masterDataCache.set(cacheKey, data, 60_000);
+        setRecords(data);
+      }
     } catch (err) {
       console.error(`Failed to fetch ${entityType}:`, err);
       setRecords([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [entityType, activeOnly]);
 
   useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      try {
+        const cacheKey = lookupCacheKey(entityType, activeOnly);
+        const cached = masterDataCache.get<T[]>(cacheKey);
+        if (cached !== undefined) {
+          if (!cancelled) setRecords(cached);
+        } else {
+          const data = await masterDataService.getAll<T>(entityType, activeOnly);
+          masterDataCache.set(cacheKey, data, 60_000);
+          if (!cancelled) setRecords(data);
+        }
+      } catch (err) {
+        console.error(`Failed to fetch ${entityType}:`, err);
+        if (!cancelled) setRecords([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entityType, activeOnly]);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback(async () => {
     invalidateEntityCache(entityType);
-    fetchRecords();
+    await fetchRecords();
   }, [entityType, fetchRecords]);
 
   return { records, isLoading, refetch };

@@ -29,8 +29,8 @@ function toRecord(command: SaveAcademicCalendarCommand): AcademicCalendarRecord 
 export class AcademicCalendarService {
   constructor(private readonly repo: IAcademicCalendarRepository) {}
 
-  save(command: SaveAcademicCalendarCommand): AcademicCalendarDto {
-    const saved = this.repo.save(toRecord(command));
+  async save(command: SaveAcademicCalendarCommand): Promise<AcademicCalendarDto> {
+    const saved = await this.repo.save(toRecord(command));
     if (!saved) {
       // AcademicCalendar new-record insert is a documented persistence no-op
       // until a dedicated table exists; return the DTO from the record.
@@ -44,30 +44,32 @@ export class AcademicCalendarService {
     return academicCalendarRecordToDto(saved);
   }
 
-  delete(command: DeleteAcademicCalendarCommand): boolean {
+  async delete(command: DeleteAcademicCalendarCommand): Promise<boolean> {
     return this.repo.delete(new SchoolDayId(command.id));
   }
 
-  getById(id: string): AcademicCalendarDto {
-    const record = this.repo.findById(new SchoolDayId(id));
+  async getById(id: string): Promise<AcademicCalendarDto> {
+    const record = await this.repo.findById(new SchoolDayId(id));
     if (!record) {
       throw new Error(`AcademicCalendar not found: ${id}`);
     }
     return academicCalendarRecordToDto(record);
   }
 
-  getByDate(query: GetAcademicCalendarByDateQuery): AcademicCalendarDto {
-    const record = this.repo.findByDate(new AcademicCalendarDate(new Date(`${query.date}T00:00:00Z`)));
+  async getByDate(query: GetAcademicCalendarByDateQuery): Promise<AcademicCalendarDto> {
+    const record = await this.repo.findByDate(new AcademicCalendarDate(new Date(`${query.date}T00:00:00Z`)));
     if (!record) {
       throw new Error(`AcademicCalendar not found for date: ${query.date}`);
     }
     return academicCalendarRecordToDto(record);
   }
 
-  list(query: ListAcademicCalendarQuery): AcademicCalendarDto[] {
+  async list(query: ListAcademicCalendarQuery): Promise<AcademicCalendarDto[]> {
     if (query.week !== undefined) {
-      return this.repo.getByWeek(new AcademicWeek(query.week)).map(academicCalendarRecordToDto);
+      const records = await this.repo.getByWeek(new AcademicWeek(query.week));
+      return records.map(academicCalendarRecordToDto);
     }
-    return this.repo.getAll().map(academicCalendarRecordToDto);
+    const records = await this.repo.getAll();
+    return records.map(academicCalendarRecordToDto);
   }
 }

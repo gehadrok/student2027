@@ -35,40 +35,45 @@ function toRecord(command: SaveCourseAssignmentCommand): CourseAssignmentRecord 
 export class CourseAssignmentService {
   constructor(private readonly repo: ICourseAssignmentRepository) {}
 
-  save(command: SaveCourseAssignmentCommand): CourseAssignmentDto {
-    const saved = this.repo.save(toRecord(command));
+  async save(command: SaveCourseAssignmentCommand): Promise<CourseAssignmentDto> {
+    const saved = await this.repo.save(toRecord(command));
     if (!saved) {
       throw new Error(`CourseAssignment save failed: ${command.id}`);
     }
     return courseAssignmentRecordToDto(saved);
   }
 
-  delete(command: DeleteCourseAssignmentCommand): boolean {
+  async delete(command: DeleteCourseAssignmentCommand): Promise<boolean> {
     return this.repo.delete(new CourseAssignmentId(command.id));
   }
 
-  getById(query: GetCourseAssignmentByIdQuery): CourseAssignmentDto {
-    const record = this.repo.findById(new CourseAssignmentId(query.id));
+  async getById(query: GetCourseAssignmentByIdQuery): Promise<CourseAssignmentDto> {
+    const record = await this.repo.findById(new CourseAssignmentId(query.id));
     if (!record) {
       throw new Error(`CourseAssignment not found: ${query.id}`);
     }
     return courseAssignmentRecordToDto(record);
   }
 
-  list(query: ListCourseAssignmentsQuery): CourseAssignmentDto[] {
+  async list(query: ListCourseAssignmentsQuery): Promise<CourseAssignmentDto[]> {
     if (query.subjectId) {
-      return this.repo.getBySubject(new SubjectId(query.subjectId)).map(courseAssignmentRecordToDto);
+      const records = await this.repo.getBySubject(new SubjectId(query.subjectId));
+      return records.map(courseAssignmentRecordToDto);
     }
     if (query.teacherId) {
-      return this.repo.getByTeacher(new TeacherId(query.teacherId)).map(courseAssignmentRecordToDto);
+      const records = await this.repo.getByTeacher(new TeacherId(query.teacherId));
+      return records.map(courseAssignmentRecordToDto);
     }
     if (query.gradeLevelId) {
-      return this.repo.getByGradeLevel(new GradeLevelId(query.gradeLevelId)).map(courseAssignmentRecordToDto);
+      const records = await this.repo.getByGradeLevel(new GradeLevelId(query.gradeLevelId));
+      return records.map(courseAssignmentRecordToDto);
     }
-    return this.repo.getAll().map(courseAssignmentRecordToDto);
+    const records = await this.repo.getAll();
+    return records.map(courseAssignmentRecordToDto);
   }
 
-  listByCurriculum(curriculumId: string): CourseAssignmentDto[] {
-    return this.repo.getByCurriculum(new CurriculumId(curriculumId)).map(courseAssignmentRecordToDto);
+  async listByCurriculum(curriculumId: string): Promise<CourseAssignmentDto[]> {
+    const records = await this.repo.getByCurriculum(new CurriculumId(curriculumId));
+    return records.map(courseAssignmentRecordToDto);
   }
 }

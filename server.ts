@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { createAcademicRouter } from "./src/modules/academic/api/academicRoutes";
+import { getSQLiteDB } from "./src/lib/sqlite-engine";
 
 dotenv.config();
 
@@ -246,6 +247,15 @@ ${JSON.stringify(summaryStats || {})}
 
 // Vite Middleware & Static Serving
 async function startServer() {
+  // Initialize the shared SQLite engine before serving traffic so the
+  // Academic REST API (and any other DataSource-backed endpoints) can
+  // persist and read records from the server-side database file.
+  try {
+    await getSQLiteDB();
+  } catch (err) {
+    console.error("⚠️ Failed to initialize SQLite engine on server:", err);
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

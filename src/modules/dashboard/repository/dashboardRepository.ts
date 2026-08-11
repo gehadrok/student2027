@@ -37,17 +37,17 @@ export class DashboardRepository implements IDashboardRepository {
     this.dataSource = dataSource || DataSourceFactory.getInstance();
   }
 
-  getKpis(): DashboardKpis {
-    const students = this.studentRepo.getAll();
-    const teachers = this.teacherRepo.getAll();
-    const payments = this.financialRepo.getAllPayments();
-    const expenses = this.financialRepo.getAllExpenses();
+  async getKpis(): Promise<DashboardKpis> {
+    const students = await this.studentRepo.getAll();
+    const teachers = await this.teacherRepo.getAll();
+    const payments = await this.financialRepo.getAllPayments();
+    const expenses = await this.financialRepo.getAllExpenses();
 
     const totalStudents = students.length || 1;
     const totalTeachers = teachers.length || 1;
 
     // Use injected DataSource for queries not covered by repositories
-    const attendanceRows: any[] = this.dataSource.query(
+    const attendanceRows: any[] = await this.dataSource.query(
       'SELECT * FROM attendance_records ORDER BY date DESC'
     );
 
@@ -121,12 +121,12 @@ export class DashboardRepository implements IDashboardRepository {
     };
   }
 
-  getTopStudents(limit: number = 5): any[] {
-    const certificates: any[] = this.dataSource.query(
+  async getTopStudents(limit: number = 5): Promise<any[]> {
+    const certificates: any[] = await this.dataSource.query(
       'SELECT * FROM certificates ORDER BY percentage DESC'
     );
-    const students = this.studentRepo.getAll();
-    const classes: any[] = this.dataSource.query(
+    const students = await this.studentRepo.getAll();
+    const classes: any[] = await this.dataSource.query(
       'SELECT * FROM school_classes'
     );
 
@@ -148,9 +148,9 @@ export class DashboardRepository implements IDashboardRepository {
       .slice(0, limit);
   }
 
-  getStrugglingStudents(): any[] {
-    const students = this.studentRepo.getAll();
-    const classes: any[] = this.dataSource.query(
+  async getStrugglingStudents(): Promise<any[]> {
+    const students = await this.studentRepo.getAll();
+    const classes: any[] = await this.dataSource.query(
       'SELECT * FROM school_classes'
     );
 
@@ -197,12 +197,12 @@ export class DashboardRepository implements IDashboardRepository {
     ];
   }
 
-  getMostAbsentClasses(): any[] {
-    const classes: any[] = this.dataSource.query(
+  async getMostAbsentClasses(): Promise<any[]> {
+    const classes: any[] = await this.dataSource.query(
       'SELECT * FROM school_classes'
     );
-    const students = this.studentRepo.getAll();
-    const attendance: any[] = this.dataSource.query(
+    const students = await this.studentRepo.getAll();
+    const attendance: any[] = await this.dataSource.query(
       'SELECT * FROM attendance_records'
     );
 
@@ -231,11 +231,11 @@ export class DashboardRepository implements IDashboardRepository {
       .sort((a: any, b: any) => b.absenceRate - a.absenceRate);
   }
 
-  getClassDistribution(): { name: string; count: number }[] {
-    const classes: any[] = this.dataSource.query(
+  async getClassDistribution(): Promise<{ name: string; count: number }[]> {
+    const classes: any[] = await this.dataSource.query(
       'SELECT * FROM school_classes'
     );
-    const students = this.studentRepo.getAll();
+    const students = await this.studentRepo.getAll();
 
     return classes.map((c: any) => {
       const count = students.filter((s: any) => s.classId === c.id).length;
@@ -246,8 +246,8 @@ export class DashboardRepository implements IDashboardRepository {
     });
   }
 
-  getAttendanceBreakdown(): { name: string; value: number; color: string }[] {
-    const kpis = this.getKpis();
+  async getAttendanceBreakdown(): Promise<{ name: string; value: number; color: string }[]> {
+    const kpis = await this.getKpis();
     return [
       { name: 'حاضر', value: kpis.presentStudentsCount, color: '#10b981' },
       { name: 'غائب', value: kpis.absentStudentsCount, color: '#ef4444' },
@@ -255,8 +255,8 @@ export class DashboardRepository implements IDashboardRepository {
     ];
   }
 
-  getNotifications(): AppNotification[] {
-    const rows: any[] = this.dataSource.query(
+  async getNotifications(): Promise<AppNotification[]> {
+    const rows: any[] = await this.dataSource.query(
       'SELECT * FROM app_notifications ORDER BY created_at DESC'
     );
 
@@ -314,8 +314,8 @@ export class DashboardRepository implements IDashboardRepository {
     ];
   }
 
-  getSettings(): SchoolSettings {
-    const rows: any[] = this.dataSource.query(
+  async getSettings(): Promise<SchoolSettings> {
+    const rows: any[] = await this.dataSource.query(
       `SELECT school_name, name_en, phone, email, address, website, admin_name,
               academic_year, current_term, logo_url, primary_color,
               enable_sms_alerts, enable_ai_analysis, attendance_lock_hour

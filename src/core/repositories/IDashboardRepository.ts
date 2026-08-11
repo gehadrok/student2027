@@ -41,13 +41,13 @@ export interface DashboardKpis {
  * Consumes other repositories (not raw dataSource).
  */
 export interface IDashboardRepository {
-  getKpis(): DashboardKpis;
-  getTopStudents(limit?: number): any[];
-  getStrugglingStudents(): any[];
-  getMostAbsentClasses(): any[];
-  getClassDistribution(): { name: string; count: number }[];
-  getAttendanceBreakdown(): { name: string; value: number; color: string }[];
-  getNotifications(): AppNotification[];
-  getSettings(): SchoolSettings;
+  getKpis(): Promise<DashboardKpis>;
+  getTopStudents(limit?: number): Promise<any[]>;
+  getStrugglingStudents(): Promise<any[]>;
+  getMostAbsentClasses(): Promise<any[]>;
+  getClassDistribution(): Promise<{ name: string; count: number }[]>;
+  getAttendanceBreakdown(): Promise<{ name: string; value: number; color: string }[]>;
+  getNotifications(): Promise<AppNotification[]>;
+  getSettings(): Promise<SchoolSettings>;
 }
 

@@ -20,6 +20,14 @@ class MasterDataCache {
     return cacheService.getOrCompute(key, fetcher, ttl);
   }
 
+  get<T>(key: string): T | undefined {
+    return cacheService.get<T>(key);
+  }
+
+  set<T>(key: string, value: T, ttl?: number): void {
+    cacheService.set(key, value, ttl);
+  }
+
   invalidate(key: string): void {
     cacheService.delete(key);
   }

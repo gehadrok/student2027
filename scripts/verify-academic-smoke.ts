@@ -47,6 +47,7 @@ class InMemoryDataSource implements IDataSource {
 
   private table(sql: string): string {
     const match = sql.toLowerCase();
+    if (match.includes('academic_calendar_days')) return 'academic_calendar_days';
     if (match.includes('academic_years')) return 'academic_years';
     if (match.includes('academic_terms')) return 'academic_terms';
     if (match.includes('subjects_master')) return 'subjects_master';
@@ -56,6 +57,7 @@ class InMemoryDataSource implements IDataSource {
   }
 
   private store(): Map<string, Map<string, Record<string, any>>> {
+    if (!this.tables.has('academic_calendar_days')) this.tables.set('academic_calendar_days', new Map());
     if (!this.tables.has('academic_years')) this.tables.set('academic_years', new Map());
     if (!this.tables.has('academic_terms')) this.tables.set('academic_terms', new Map());
     if (!this.tables.has('subjects_master')) this.tables.set('subjects_master', new Map());
@@ -64,7 +66,7 @@ class InMemoryDataSource implements IDataSource {
     return this.tables;
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const t = this.table(sql);
     const rows = Array.from(this.store().get(t)!.values());
     if (params && params.length > 0) {
@@ -74,12 +76,12 @@ class InMemoryDataSource implements IDataSource {
     return rows as unknown as T[];
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-  execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     const t = this.table(sql);
     const store = this.store().get(t)!;
     const lower = sql.toLowerCase();
@@ -87,7 +89,7 @@ class InMemoryDataSource implements IDataSource {
 
     if (lower.startsWith('insert')) {
       const obj: Record<string, any> = {};
-      if (t === 'academic_years' || t === 'academic_terms' || t === 'subjects_master' || t === 'subjects' || t === 'schedule_periods') {
+      if (t === 'academic_years' || t === 'academic_terms' || t === 'subjects_master' || t === 'subjects' || t === 'schedule_periods' || t === 'academic_calendar_days') {
         const cols = (sql.match(/\(([^)]+)\)/) || [])[1]?.split(',').map((c: string) => c.trim()) || [];
         cols.forEach((c: string, i: number) => {
           obj[c] = params?.[i];
@@ -113,37 +115,37 @@ class InMemoryDataSource implements IDataSource {
     return { changes: 0, lastInsertRowid: 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
       return { success: false, error: 'Simulated transaction failure' };
     }
     try {
-      this.beginTransaction();
+      await this.beginTransaction();
       for (const q of queries) {
-        this.execute(q.sql, q.params);
+        await this.execute(q.sql, q.params);
       }
-      this.commit();
+      await this.commit();
       return { success: true };
     } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       return { success: false, error: err?.message || 'Transaction failed' };
     }
   }
 
-  prepare(sql: string): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(sql: string): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     return { run: () => undefined, free: () => undefined };
   }
 
-  count(sql: string, params?: any[]): number {
-    return this.query(sql, params).length;
+  async count(sql: string, params?: any[]): Promise<number> {
+    return (await this.query(sql, params)).length;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    return (await this.count(sql, params)) > 0;
   }
 
-  beginTransaction(): void {
+  async beginTransaction(): Promise<void> {
     this.txnActive = true;
     this.txnSnapshot = new Map();
     for (const [name, table] of this.store()) {
@@ -151,11 +153,11 @@ class InMemoryDataSource implements IDataSource {
     }
   }
 
-  commit(): void {
+  async commit(): Promise<void> {
     this.txnActive = false;
   }
 
-  rollback(): void {
+  async rollback(): Promise<void> {
     if (this.txnActive && this.txnSnapshot.size > 0) {
       this.tables = this.txnSnapshot;
       this.txnActive = false;
@@ -174,13 +176,14 @@ function check(name: string, cond: boolean, detail = ''): void {
 }
 
 // ── 1. UnitOfWork commit ───────────────────────────────────────────────────
+async function main(): Promise<void> {
 {
   const ds = new InMemoryDataSource();
   const uow = new UnitOfWork(ds);
   uow.register('INSERT INTO academic_years (id, code) VALUES (?, ?)', ['ay1', '2024-2025']);
-  const result = uow.commit();
+  const result = await uow.commit();
   check('UnitOfWork commit succeeds', result.success === true);
-  check('UnitOfWork registers + commits into DataSource', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay1']));
+  check('UnitOfWork registers + commits into DataSource', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay1']));
   check('UnitOfWork clears after commit', uow.pendingCount === 0);
 }
 
@@ -190,17 +193,17 @@ function check(name: string, cond: boolean, detail = ''): void {
   ds.failNextTransaction = true;
   const uow = new UnitOfWork(ds);
   uow.register('INSERT INTO academic_terms (id, code) VALUES (?, ?)', ['t1', 'T1']);
-  const result = uow.commit();
+  const result = await uow.commit();
   check('UnitOfWork rolls back on failure', result.success === false);
 }
 
 // ── 3. UnitOfWork rollback via explicit rollback ────────────────────────────
 {
   const ds = new InMemoryDataSource();
-  ds.beginTransaction();
-  ds.execute('INSERT INTO academic_years (id, code) VALUES (?, ?)', ['ay_rollback', '2023-2024']);
-  ds.rollback();
-  check('DataSource rollback discards pending write', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay_rollback']) === false);
+  await ds.beginTransaction();
+  await ds.execute('INSERT INTO academic_years (id, code) VALUES (?, ?)', ['ay_rollback', '2023-2024']);
+  await ds.rollback();
+  check('DataSource rollback discards pending write', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay_rollback']) === false);
 }
 
 // ── 4. AcademicYear aggregate persistence + rehydration + event dispatch ────
@@ -221,12 +224,12 @@ function check(name: string, cond: boolean, detail = ''): void {
     createdBy: 'test-user',
   });
 
-  repo.save(year);
+  await repo.save(year);
 
-  check('AcademicYear persisted (CRUD create)', ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay_smoke']));
+  check('AcademicYear persisted (CRUD create)', await ds.exists('SELECT 1 FROM academic_years WHERE id = ?', ['ay_smoke']));
   check('AcademicYearCreated event dispatched', dispatchedEvents.length === 1);
 
-  const rehydrated = repo.findById(new AcademicYearId('ay_smoke'));
+  const rehydrated = await repo.findById(new AcademicYearId('ay_smoke'));
   check('AcademicYear rehydration (findById)', rehydrated !== null);
   check('AcademicYear rehydrated code', rehydrated?.code.toString() === '2025-2026');
   check('AcademicYear rehydrated status', rehydrated?.status === 'draft');
@@ -240,11 +243,11 @@ function check(name: string, cond: boolean, detail = ''): void {
     }),
     'test-user'
   );
-  repo.save(year);
-  const withTerm = repo.findById(new AcademicYearId('ay_smoke'));
+  await repo.save(year);
+  const withTerm = await repo.findById(new AcademicYearId('ay_smoke'));
   check('AcademicYear term child persisted', withTerm?.terms.length === 1);
 
-  const deleted = repo.delete(new AcademicYearId('ay_smoke'));
+  const deleted = await repo.delete(new AcademicYearId('ay_smoke'));
   check('AcademicYear delete (CRUD delete)', deleted === true);
 }
 
@@ -252,7 +255,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 {
   const ds = new InMemoryDataSource();
   const curriculumRepo = new SQLiteCurriculumRepository(ds, new UnitOfWork(ds));
-  const saved = curriculumRepo.save({
+  const saved = await curriculumRepo.save({
     id: 'cur_1',
     code: 'MATH-101',
     nameAr: 'رياضيات',
@@ -261,12 +264,12 @@ function check(name: string, cond: boolean, detail = ''): void {
     displayOrder: 1,
   });
   check('Curriculum repo save (CRUD create)', saved !== null);
-  const found = curriculumRepo.findById(new CurriculumId('cur_1'));
+  const found = await curriculumRepo.findById(new CurriculumId('cur_1'));
   check('Curriculum repo findById', found?.code === 'MATH-101');
-  check('Curriculum repo delete', curriculumRepo.delete(new CurriculumId('cur_1')) === true);
+  check('Curriculum repo delete', await curriculumRepo.delete(new CurriculumId('cur_1')) === true);
 
   const caRepo = new SQLiteCourseAssignmentRepository(ds, new UnitOfWork(ds));
-  const ca = caRepo.save({
+  const ca = await caRepo.save({
     id: 'ca_1',
     subjectId: 'subj_1',
     teacherId: 'tch_1',
@@ -274,24 +277,22 @@ function check(name: string, cond: boolean, detail = ''): void {
     isActive: true,
   });
   check('CourseAssignment repo save (CRUD create)', ca !== null);
-  const caFound = caRepo.findById(new CourseAssignmentId('ca_1'));
+  const caFound = await caRepo.findById(new CourseAssignmentId('ca_1'));
   check('CourseAssignment repo findById', caFound?.id === 'ca_1');
 
 const calRepo = new SQLiteAcademicCalendarRepository(ds, new UnitOfWork(ds));
-  const cal = calRepo.save({
+  const cal = await calRepo.save({
     id: 'day_1',
     date: '2025-09-01',
     isInstructional: true,
     academicWeek: 1,
   });
-  // Known limitation: schedule_periods requires FK dependencies, so a new
-  // AcademicCalendar record is tracked ephemerally (save returns null).
-  // This verifies the repo handles the no-op without throwing.
-  check('AcademicCalendar repo save handles no-op gracefully', cal === null || cal !== null);
-  const calFound = calRepo.findById(new SchoolDayId('day_1'));
-  // findById may return null for a no-op insert (not persisted). Only assert
-  // that the call does not throw.
-  check('AcademicCalendar repo findById does not throw', true);
+  // The dedicated academic_calendar_days table requires no timetable FK
+  // parents, so a new record is persisted (INSERT) and returned.
+  check('AcademicCalendar repo save persists new day (INSERT)', cal !== null && cal.date === '2025-09-01');
+  const calFound = await calRepo.findById(new SchoolDayId('day_1'));
+  check('AcademicCalendar repo findById returns persisted day', calFound?.id === 'day_1');
+  check('AcademicCalendar repo row exists in academic_calendar_days', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', ['day_1']));
 }
 
 // ── 6. DI resolution ────────────────────────────────────────────────────────
@@ -316,3 +317,9 @@ const calRepo = new SQLiteAcademicCalendarRepository(ds, new UnitOfWork(ds));
 console.log(`\nAcademic Repository Smoke Tests: ${failures === 0 ? 'ALL PASSED' : `${failures} FAILURE(S)`}`);
 if (failures > 0) process.exit(1);
 process.exit(0);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

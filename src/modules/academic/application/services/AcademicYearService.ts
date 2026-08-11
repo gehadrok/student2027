@@ -51,7 +51,7 @@ export class AcademicYearService {
 
   // ── Commands ─────────────────────────────────────────────────────────────
 
-  create(command: CreateAcademicYearCommand): AcademicYearDto {
+  async create(command: CreateAcademicYearCommand): Promise<AcademicYearDto> {
     const year = AcademicYear.create({
       id: new AcademicYearId(command.id),
       code: new AcademicYearCode(command.code),
@@ -63,12 +63,12 @@ export class AcademicYearService {
       createdBy: command.createdBy,
       ministryReferenceCode: command.ministryReferenceCode,
     });
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), year.id.toString()));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), year.id.toString()));
   }
 
-  addTerm(command: AddAcademicTermCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async addTerm(command: AddAcademicTermCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     const term = new AcademicTerm({
       id: new AcademicTermId(command.id),
       code: new AcademicTermCode(command.code),
@@ -78,77 +78,77 @@ export class AcademicYearService {
       }),
     });
     year.addTerm(term, command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  approve(command: ApproveAcademicYearCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async approve(command: ApproveAcademicYearCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.approve(command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  activate(command: ActivateAcademicYearCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async activate(command: ActivateAcademicYearCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.activate(command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  close(command: CloseAcademicYearCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async close(command: CloseAcademicYearCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.close(command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  archive(command: ArchiveAcademicYearCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async archive(command: ArchiveAcademicYearCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.archive(command.reason, command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  openTerm(command: OpenTermCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async openTerm(command: OpenTermCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.openTerm(new AcademicTermId(command.termId), command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  lockTerm(command: LockTermCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async lockTerm(command: LockTermCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.lockTerm(new AcademicTermId(command.termId), command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  closeTerm(command: CloseTermCommand): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
+  async closeTerm(command: CloseTermCommand): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(command.academicYearId)), command.academicYearId);
     year.closeTerm(new AcademicTermId(command.termId), command.changedBy);
-    this.repo.save(year);
-    return academicYearToDto(requireYear(this.repo.findById(year.id), command.academicYearId));
+    await this.repo.save(year);
+    return academicYearToDto(requireYear(await this.repo.findById(year.id), command.academicYearId));
   }
 
-  delete(command: DeleteAcademicYearCommand): boolean {
+  async delete(command: DeleteAcademicYearCommand): Promise<boolean> {
     return this.repo.delete(new AcademicYearId(command.academicYearId));
   }
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
-  getById(query: GetAcademicYearByIdQuery): AcademicYearDto {
-    const year = requireYear(this.repo.findById(new AcademicYearId(query.id)), query.id);
+  async getById(query: GetAcademicYearByIdQuery): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findById(new AcademicYearId(query.id)), query.id);
     return academicYearToDto(year);
   }
 
-  getByCode(query: GetAcademicYearByCodeQuery): AcademicYearDto {
-    const year = requireYear(this.repo.findByCode(new AcademicYearCode(query.code)), query.code);
+  async getByCode(query: GetAcademicYearByCodeQuery): Promise<AcademicYearDto> {
+    const year = requireYear(await this.repo.findByCode(new AcademicYearCode(query.code)), query.code);
     return academicYearToDto(year);
   }
 
-  list(query: ListAcademicYearsQuery): AcademicYearSummaryDto[] {
-    const years = this.repo.getAll();
+  async list(query: ListAcademicYearsQuery): Promise<AcademicYearSummaryDto[]> {
+    const years = await this.repo.getAll();
     const filtered = query.status ? years.filter((y) => y.status === query.status) : years;
     return filtered.map(academicYearToSummaryDto);
   }

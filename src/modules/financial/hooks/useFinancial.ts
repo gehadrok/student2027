@@ -9,23 +9,31 @@ export const useFinancial = () => {
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const refreshData = useCallback(() => {
+  const refreshData = useCallback(async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setPayments(financialService.getPayments());
-      setExpenses(financialService.getExpenses());
-      setSummary(financialService.getSummary());
+    try {
+      const [paymentsData, expensesData, summaryData] = await Promise.all([
+        financialService.getPayments(),
+        financialService.getExpenses(),
+        financialService.getSummary()
+      ]);
+      setPayments(paymentsData);
+      setExpenses(expensesData);
+      setSummary(summaryData);
+    } catch (err: any) {
+      console.error('Failed to load financial data:', err);
+    } finally {
       setIsLoading(false);
-    }, 100);
+    }
   }, []);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  const recordPayment = (paymentId: string, amount: number, method: 'cash' | 'card' | 'transfer') => {
-    const updated = financialService.recordPayment(paymentId, amount, method);
-    refreshData();
+  const recordPayment = async (paymentId: string, amount: number, method: 'cash' | 'card' | 'transfer') => {
+    const updated = await financialService.recordPayment(paymentId, amount, method);
+    await refreshData();
     return updated;
   };
 

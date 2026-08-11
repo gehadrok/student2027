@@ -1,15 +1,15 @@
 import { AcademicCalendarRecord } from '../../domain/repositories/IAcademicCalendarRepository';
 
 /**
- * Row shape for the schedule_periods table (existing schema from schema.sql).
- * Pragmatic mapping: academic calendar school days map onto the day column plus
- * a synthetic instructional flag. Full calendar persistence requires a dedicated
- * table (future migration — no SQL schema changes allowed in this phase).
+ * Row shape for the academic_calendar_days table (dedicated Academic calendar
+ * persistence). Calendar days persist with (id, day = ISO date, academic_week,
+ * is_instructional) and do NOT require timetable FK parents.
  */
 export interface AcademicCalendarRow {
   id: string;
   day: string;
   academic_week: number;
+  is_instructional?: number;
 }
 
 export function academicCalendarRecordToRow(record: AcademicCalendarRecord): AcademicCalendarRow {
@@ -17,6 +17,7 @@ export function academicCalendarRecordToRow(record: AcademicCalendarRecord): Aca
     id: record.id,
     day: record.date,
     academic_week: record.academicWeek ?? 1,
+    is_instructional: record.isInstructional === false ? 0 : 1,
   };
 }
 
@@ -25,7 +26,7 @@ export function academicCalendarRowToRecord(row: AcademicCalendarRow): AcademicC
   return {
     id: row.id,
     date,
-    isInstructional: true,
+    isInstructional: (row.is_instructional ?? 1) === 1,
     academicWeek: row.academic_week,
   };
 }

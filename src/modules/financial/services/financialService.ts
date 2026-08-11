@@ -3,9 +3,9 @@ import { FeePayment, ExpenseRecord } from '../../../types';
 import { FinancialSummary } from '../types';
 
 export class FinancialService {
-  getSummary(): FinancialSummary {
-    const payments = financialRepository.getAllPayments();
-    const expenses = financialRepository.getAllExpenses();
+  async getSummary(): Promise<FinancialSummary> {
+    const payments = await financialRepository.getAllPayments();
+    const expenses = await financialRepository.getAllExpenses();
 
     const totalRevenue = payments.reduce((acc, p) => acc + p.totalAmount, 0);
     const collectedRevenue = payments.reduce((acc, p) => acc + p.paidAmount, 0);
@@ -22,16 +22,16 @@ export class FinancialService {
     };
   }
 
-  getPayments(): FeePayment[] {
+  async getPayments(): Promise<FeePayment[]> {
     return financialRepository.getAllPayments();
   }
 
-  getExpenses(): ExpenseRecord[] {
+  async getExpenses(): Promise<ExpenseRecord[]> {
     return financialRepository.getAllExpenses();
   }
 
-  recordPayment(paymentId: string, amountPaid: number, method: 'cash' | 'card' | 'transfer'): FeePayment | undefined {
-    const payments = financialRepository.getAllPayments();
+  async recordPayment(paymentId: string, amountPaid: number, method: 'cash' | 'card' | 'transfer'): Promise<FeePayment | undefined> {
+    const payments = await financialRepository.getAllPayments();
     const payment = payments.find((p) => p.id === paymentId);
     if (!payment) return undefined;
 

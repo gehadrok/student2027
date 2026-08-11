@@ -413,9 +413,26 @@ CREATE TABLE IF NOT EXISTS subjects_master (
     updated_by TEXT
 );
 
+-- 24. ACADEMIC CALENDAR DAYS (أيام التقويم الدراسي)
+-- NOTE (Academic runtime persistence alignment): dedicated table so the
+-- AcademicCalendar repository can INSERT/UPDATE/DELETE school days that carry
+-- only (id, date/day, academic_week, is_instructional) WITHOUT requiring the
+-- full timetable FK parents (class/section/subject/teacher) that
+-- `schedule_periods` mandates. `day` holds the ISO calendar date.
+CREATE TABLE IF NOT EXISTS academic_calendar_days (
+    id TEXT PRIMARY KEY,
+    day TEXT NOT NULL UNIQUE,
+    academic_week INTEGER NOT NULL DEFAULT 1,
+    is_instructional INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================================================
 -- PERFORMANCE INDEXES (25+ INDEXES)
 -- ============================================================================
+CREATE INDEX IF NOT EXISTS idx_academic_calendar_days_day ON academic_calendar_days(day);
+CREATE INDEX IF NOT EXISTS idx_academic_calendar_days_week ON academic_calendar_days(academic_week);
 CREATE INDEX IF NOT EXISTS idx_academic_years_code ON academic_years(code);
 CREATE INDEX IF NOT EXISTS idx_academic_years_is_active ON academic_years(is_active);
 CREATE INDEX IF NOT EXISTS idx_academic_terms_year ON academic_terms(academic_year_id);

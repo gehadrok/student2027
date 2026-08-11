@@ -23,12 +23,12 @@ export interface CourseAssignmentRecord {
  * Repository contract for CourseAssignment data.
  */
 export interface ICourseAssignmentRepository {
-  save(record: CourseAssignmentRecord): CourseAssignmentRecord | null;
-  findById(id: CourseAssignmentId): CourseAssignmentRecord | null;
-  getBySubject(subjectId: SubjectId): CourseAssignmentRecord[];
-  getByTeacher(teacherId: TeacherId): CourseAssignmentRecord[];
-  getByGradeLevel(gradeLevelId: GradeLevelId): CourseAssignmentRecord[];
-  getByCurriculum(curriculumId: CurriculumId): CourseAssignmentRecord[];
-  getAll(): CourseAssignmentRecord[];
-  delete(id: CourseAssignmentId): boolean;
+  save(record: CourseAssignmentRecord): Promise<CourseAssignmentRecord | null>;
+  findById(id: CourseAssignmentId): Promise<CourseAssignmentRecord | null>;
+  getBySubject(subjectId: SubjectId): Promise<CourseAssignmentRecord[]>;
+  getByTeacher(teacherId: TeacherId): Promise<CourseAssignmentRecord[]>;
+  getByGradeLevel(gradeLevelId: GradeLevelId): Promise<CourseAssignmentRecord[]>;
+  getByCurriculum(curriculumId: CurriculumId): Promise<CourseAssignmentRecord[]>;
+  getAll(): Promise<CourseAssignmentRecord[]>;
+  delete(id: CourseAssignmentId): Promise<boolean>;
 }

@@ -65,6 +65,7 @@ class InMemoryDataSource implements IDataSource {
 
   tableName(sql: string): string {
     const m = sql.toLowerCase();
+    if (m.includes('academic_calendar_days')) return 'academic_calendar_days';
     if (m.includes('academic_years')) return 'academic_years';
     if (m.includes('academic_terms')) return 'academic_terms';
     if (m.includes('subjects_master')) return 'subjects_master';
@@ -74,13 +75,13 @@ class InMemoryDataSource implements IDataSource {
   }
 
   store(): Map<string, Map<string, Record<string, any>>> {
-    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods']) {
+    for (const t of ['academic_years', 'academic_terms', 'subjects_master', 'subjects', 'schedule_periods', 'academic_calendar_days']) {
       if (!this.tables.has(t)) this.tables.set(t, new Map());
     }
     return this.tables;
   }
 
-  query<T = any>(sql: string, params?: any[]): T[] {
+  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     let rows = Array.from(table.values());
@@ -91,12 +92,12 @@ class InMemoryDataSource implements IDataSource {
     return rows as unknown as T[];
   }
 
-  queryOne<T = any>(sql: string, params?: any[]): T | null {
-    const rows = this.query<T>(sql, params);
+  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const rows = await this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
-execute(sql: string, params?: any[]): { changes: number; lastInsertRowid: number } {
+async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
     const t = this.tableName(sql);
     const table = this.store().get(t)!;
     const lower = sql.toLowerCase();
@@ -147,45 +148,45 @@ if (lower.startsWith('update')) {
     return { changes: 0, lastInsertRowid: 0 };
   }
 
-  transaction(queries: Array<{ sql: string; params?: any[] }>): { success: boolean; error?: string } {
+  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
       return { success: false, error: 'Simulated transaction failure' };
     }
     try {
-      this.beginTransaction();
-      for (const q of queries) this.execute(q.sql, q.params);
-      this.commit();
+      await this.beginTransaction();
+      for (const q of queries) await this.execute(q.sql, q.params);
+      await this.commit();
       return { success: true };
     } catch (err: any) {
-      this.rollback();
+      await this.rollback();
       return { success: false, error: err?.message || 'Transaction failed' };
     }
   }
 
-  prepare(): { run: (params?: any[]) => void; free: () => void } {
+  async prepare(): Promise<{ run: (params?: any[]) => void; free: () => void }> {
     return { run: () => undefined, free: () => undefined };
   }
 
-  count(sql: string, params?: any[]): number {
-    return this.query(sql, params).length;
+  async count(sql: string, params?: any[]): Promise<number> {
+    return (await this.query(sql, params)).length;
   }
 
-  exists(sql: string, params?: any[]): boolean {
-    return this.count(sql, params) > 0;
+  async exists(sql: string, params?: any[]): Promise<boolean> {
+    return (await this.count(sql, params)) > 0;
   }
 
-  beginTransaction(): void {
+  async beginTransaction(): Promise<void> {
     this.txnActive = true;
     this.txnSnapshot = new Map();
     for (const [name, table] of this.store()) this.txnSnapshot.set(name, new Map(table));
   }
 
-  commit(): void {
+  async commit(): Promise<void> {
     this.txnActive = false;
   }
 
-  rollback(): void {
+  async rollback(): Promise<void> {
     if (this.txnActive && this.txnSnapshot.size > 0) {
       this.tables = this.txnSnapshot;
       this.txnActive = false;
@@ -248,11 +249,11 @@ export async function run(): Promise<number> {
     check('version 1 on creation', year.version === 1);
 
     // Save draft → persistence + event
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('AcademicYearCreated event published', published.includes('AcademicYearCreated'));
 
     // Load & reconstruct
-    const loaded1 = yearRepo.findById(new AcademicYearId('iy-2025'));
+    const loaded1 = await yearRepo.findById(new AcademicYearId('iy-2025'));
     check('reconstructed after save (findById)', loaded1 !== null);
     check('reconstructed code', loaded1?.code.toString() === '2025-2026');
     check('reconstructed status draft', loaded1?.status === 'draft');
@@ -273,12 +274,12 @@ export async function run(): Promise<number> {
       });
       let threw = false;
       try {
-        repo2.save(y2);
+        await repo2.save(y2);
       } catch {
         threw = true;
       }
       check('save throws on transaction failure', threw);
-      check('transaction rolled back (no row persisted)', !ds2.exists('SELECT 1 FROM academic_years WHERE id = ?', ['iy-fail']));
+      check('transaction rolled back (no row persisted)', !(await ds2.exists('SELECT 1 FROM academic_years WHERE id = ?', ['iy-fail'])));
     }
 
     // ═════ 1c. Lifecycle transitions ═════
@@ -289,39 +290,39 @@ export async function run(): Promise<number> {
       dateRange: new DateRange({ startDate: new Date('2025-09-01'), endDate: new Date('2026-01-31') }),
     });
     year.addTerm(term, 'integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
 
     year.approve('integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('approved event published', published.includes('AcademicYearApproved'));
-    const approved = yearRepo.findById(new AcademicYearId('iy-2025'));
+    const approved = await yearRepo.findById(new AcademicYearId('iy-2025'));
     check('approved reconstructed', approved?.status === 'approved');
 
     year.activate('integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('activated event published', published.includes('AcademicYearActivated'));
-    const active = yearRepo.findById(new AcademicYearId('iy-2025'));
+    const active = await yearRepo.findById(new AcademicYearId('iy-2025'));
     check('active reconstructed', active?.status === 'active');
 
     year.close('integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('closed event published', published.includes('AcademicYearClosed'));
-    const closed = yearRepo.findById(new AcademicYearId('iy-2025'));
+    const closed = await yearRepo.findById(new AcademicYearId('iy-2025'));
     check('closed reconstructed', closed?.status === 'closed');
 
     year.archive('end of cycle', 'integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('archived event published', published.includes('AcademicYearArchived'));
-    const archived = yearRepo.findById(new AcademicYearId('iy-2025'));
+    const archived = await yearRepo.findById(new AcademicYearId('iy-2025'));
     check('archived reconstructed', archived?.status === 'archived');
 
 // GetAll returns the record
-    const all = yearRepo.getAll();
+    const all = await yearRepo.getAll();
     check('getAll returns persisted year', all.some((y: AcademicYear) => y.id.toString() === 'iy-2025'));
 
     // Delete
-    check('delete returns true', yearRepo.delete(new AcademicYearId('iy-2025')) === true);
-    check('deleted year gone', yearRepo.findById(new AcademicYearId('iy-2025')) === null);
+    check('delete returns true', await yearRepo.delete(new AcademicYearId('iy-2025')) === true);
+    check('deleted year gone', await yearRepo.findById(new AcademicYearId('iy-2025')) === null);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -356,27 +357,27 @@ export async function run(): Promise<number> {
 
     year.addTerm(t1, 'integration-runner');
     year.addTerm(t2, 'integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('AcademicTermAdded events published', published.filter((p) => p === 'AcademicTermAdded').length === 2);
 
     // Terms persisted as children
-    const loaded = yearRepo.findById(new AcademicYearId('iy-terms'));
+    const loaded = await yearRepo.findById(new AcademicYearId('iy-terms'));
     check('2 terms reconstructed', loaded?.terms.length === 2);
 check('term codes preserved', loaded?.terms.map((t: AcademicTerm) => t.code.toString()).join(',') === 'F1,S2');
 
     // Open first term
     year.openTerm(new AcademicTermId('term-f1'), 'integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('AcademicTermOpened event published', published.includes('AcademicTermOpened'));
-    const opened = yearRepo.findById(new AcademicYearId('iy-terms'));
+    const opened = await yearRepo.findById(new AcademicYearId('iy-terms'));
     const openedTerm = opened?.terms.find((t: AcademicTerm) => t.id.toString() === 'term-f1');
     check('term status open', openedTerm?.status === 'open');
 
     // Lock second term
     year.closeTerm(new AcademicTermId('term-f1'), 'integration-runner');
-    yearRepo.save(year);
+    await yearRepo.save(year);
     check('AcademicTermClosed event published', published.includes('AcademicTermClosed'));
-    const closedLoaded = yearRepo.findById(new AcademicYearId('iy-terms'));
+    const closedLoaded = await yearRepo.findById(new AcademicYearId('iy-terms'));
     const closedTerm = closedLoaded?.terms.find((t: AcademicTerm) => t.id.toString() === 'term-f1');
     check('term status closed', closedTerm?.status === 'closed');
 
@@ -394,7 +395,7 @@ check('term codes preserved', loaded?.terms.map((t: AcademicTerm) => t.code.toSt
     }
     check('overlapping term rejected', overlapThrew);
 
-    yearRepo.delete(new AcademicYearId('iy-terms'));
+    await yearRepo.delete(new AcademicYearId('iy-terms'));
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -402,7 +403,7 @@ check('term codes preserved', loaded?.terms.map((t: AcademicTerm) => t.code.toSt
   // ═════════════════════════════════════════════════════════════════════════
   console.log('\n[3] Curriculum persistence');
   {
-    const saved = curriculumRepo.save({
+    const saved = await curriculumRepo.save({
       id: 'cur-math',
       code: 'MATH-101',
       nameAr: 'رياضيات',
@@ -415,22 +416,22 @@ check('term codes preserved', loaded?.terms.map((t: AcademicTerm) => t.code.toSt
     check('curriculum save returns record', saved !== null);
     check('curriculum saved code', saved?.code === 'MATH-101');
 
-    const byId = curriculumRepo.findById(new CurriculumId('cur-math'));
+    const byId = await curriculumRepo.findById(new CurriculumId('cur-math'));
     check('curriculum findById', byId?.code === 'MATH-101');
     check('curriculum mapper nameAr', byId?.nameAr === 'رياضيات');
     check('curriculum mapper isActive', byId?.isActive === true);
 
-    const byCode = curriculumRepo.findByCode(new CurriculumCode('MATH-101'));
+    const byCode = await curriculumRepo.findByCode(new CurriculumCode('MATH-101'));
     check('curriculum findByCode', byCode?.id === 'cur-math');
 
-const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
+const byGrade = await curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
     check('curriculum getByGradeLevel', byGrade.some((c: CurriculumRecord) => c.id === 'cur-math'));
 
-    const allActive = curriculumRepo.getAll(true);
+    const allActive = await curriculumRepo.getAll(true);
     check('curriculum getAll active', allActive.some((c: CurriculumRecord) => c.id === 'cur-math'));
 
     // Update (UnitOfWork update path)
-    const updated = curriculumRepo.save({
+    const updated = await curriculumRepo.save({
       id: 'cur-math',
       code: 'MATH-201',
       nameAr: 'رياضيات متقدمة',
@@ -439,11 +440,11 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
       displayOrder: 2,
     });
     check('curriculum update', updated?.code === 'MATH-201');
-    const reloaded = curriculumRepo.findById(new CurriculumId('cur-math'));
+    const reloaded = await curriculumRepo.findById(new CurriculumId('cur-math'));
     check('curriculum update persisted', reloaded?.code === 'MATH-201');
 
-    check('curriculum delete', curriculumRepo.delete(new CurriculumId('cur-math')) === true);
-    check('curriculum delete persisted', curriculumRepo.findById(new CurriculumId('cur-math')) === null);
+    check('curriculum delete', await curriculumRepo.delete(new CurriculumId('cur-math')) === true);
+    check('curriculum delete persisted', await curriculumRepo.findById(new CurriculumId('cur-math')) === null);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -451,7 +452,7 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
   // ═════════════════════════════════════════════════════════════════════════
   console.log('\n[4] CourseAssignment persistence');
   {
-    const saved = caRepo.save({
+    const saved = await caRepo.save({
       id: 'ca-1',
       subjectId: 'subj-1',
       teacherId: 'tch-1',
@@ -462,25 +463,25 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
     check('course assignment save returns record', saved !== null);
     check('course assignment saved id', saved?.id === 'ca-1');
 
-    const byId = caRepo.findById(new CourseAssignmentId('ca-1'));
+    const byId = await caRepo.findById(new CourseAssignmentId('ca-1'));
     check('course assignment findById', byId?.subjectId === 'subj-1');
     check('course assignment mapper weeklyPeriods', byId?.weeklyPeriods === 4);
     check('course assignment mapper teacherId', byId?.teacherId === 'tch-1');
 
-    const bySubject = caRepo.getBySubject(new SubjectId('subj-1'));
+    const bySubject = await caRepo.getBySubject(new SubjectId('subj-1'));
     check('course assignment getBySubject', bySubject.some((c) => c.id === 'ca-1'));
 
-    const byTeacher = caRepo.getByTeacher(new TeacherId('tch-1'));
+    const byTeacher = await caRepo.getByTeacher(new TeacherId('tch-1'));
     check('course assignment getByTeacher', byTeacher.some((c) => c.id === 'ca-1'));
 
-    const byGrade = caRepo.getByGradeLevel(new GradeLevelId('grade-7'));
+    const byGrade = await caRepo.getByGradeLevel(new GradeLevelId('grade-7'));
     check('course assignment getByGradeLevel', byGrade.some((c) => c.id === 'ca-1'));
 
-    const all = caRepo.getAll();
+    const all = await caRepo.getAll();
     check('course assignment getAll', all.some((c) => c.id === 'ca-1'));
 
     // Update
-    const updated = caRepo.save({
+    const updated = await caRepo.save({
       id: 'ca-1',
       subjectId: 'subj-1',
       teacherId: 'tch-2',
@@ -489,11 +490,11 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
       isActive: true,
     });
     check('course assignment update', updated?.teacherId === 'tch-2');
-    const reloaded = caRepo.findById(new CourseAssignmentId('ca-1'));
+    const reloaded = await caRepo.findById(new CourseAssignmentId('ca-1'));
     check('course assignment update persisted', reloaded?.weeklyPeriods === 5);
 
-    check('course assignment delete', caRepo.delete(new CourseAssignmentId('ca-1')) === true);
-    check('course assignment delete persisted', caRepo.findById(new CourseAssignmentId('ca-1')) === null);
+    check('course assignment delete', await caRepo.delete(new CourseAssignmentId('ca-1')) === true);
+    check('course assignment delete persisted', await caRepo.findById(new CourseAssignmentId('ca-1')) === null);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -501,39 +502,40 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
   // ═════════════════════════════════════════════════════════════════════════
   console.log('\n[5] AcademicCalendar persistence');
   {
-    // Seed a schedule_periods row so the update path is exercised.
-    ds.execute('INSERT INTO schedule_periods (id, day, academic_week) VALUES (?, ?, ?)', ['day-1', '2025-09-01', 1]);
-
-    const saved = calRepo.save({
-      id: 'day-1',
-      date: '2025-09-01',
-      isInstructional: true,
-      academicWeek: 1,
-    });
-    // Update path: schedule_periods day already exists → returns the record.
-    check('academic calendar update returns record', saved !== null);
-    check('academic calendar update date', saved?.date === '2025-09-01');
-
-    const byDate = calRepo.findByDate(new AcademicCalendarDate(new Date('2025-09-01')));
-    check('academic calendar findByDate', byDate?.id === 'day-1');
-
-    const byWeek = calRepo.getByWeek(new AcademicWeek(1));
-    check('academic calendar getByWeek', byWeek.some((c) => c.id === 'day-1'));
-
-    const all = calRepo.getAll();
-    check('academic calendar getAll', all.some((c) => c.id === 'day-1'));
-
-    // New-record insert is a documented no-op (FK dependencies not present).
-    const newSaved = calRepo.save({
+    // New-record INSERT: dedicated academic_calendar_days table requires no
+    // timetable FK parents, so a brand-new day must persist.
+    const created = await calRepo.save({
       id: 'day-new',
       date: '2025-09-02',
       isInstructional: true,
       academicWeek: 2,
     });
-    check('academic calendar new-record save does not throw', true);
+    check('academic calendar new-record insert returns record', created !== null);
+    check('academic calendar new-record insert date', created?.date === '2025-09-02');
+    check('academic calendar new-record insert persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ? AND day = ?', ['day-new', '2025-09-02']));
 
-    check('academic calendar delete', calRepo.delete(new SchoolDayId('day-1')) === true);
-    check('academic calendar delete persisted', ds.exists('SELECT 1 FROM schedule_periods WHERE id = ?', ['day-1']) === false);
+    // Update path: same id → UPDATE the existing row.
+    const updated = await calRepo.save({
+      id: 'day-new',
+      date: '2025-09-02',
+      isInstructional: false,
+      academicWeek: 3,
+    });
+    check('academic calendar update returns record', updated !== null);
+    check('academic calendar update week persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ? AND academic_week = 3 AND is_instructional = 0', ['day-new']));
+
+    const byDate = await calRepo.findByDate(new AcademicCalendarDate(new Date('2025-09-02')));
+    check('academic calendar findByDate', byDate?.id === 'day-new');
+    check('academic calendar findByDate non-instructional', byDate?.isInstructional === false);
+
+    const byWeek = await calRepo.getByWeek(new AcademicWeek(3));
+    check('academic calendar getByWeek', byWeek.some((c) => c.id === 'day-new'));
+
+    const all = await calRepo.getAll();
+    check('academic calendar getAll', all.some((c) => c.id === 'day-new'));
+
+    check('academic calendar delete', await calRepo.delete(new SchoolDayId('day-new')) === true);
+    check('academic calendar delete persisted', await ds.exists('SELECT 1 FROM academic_calendar_days WHERE id = ?', ['day-new']) === false);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -562,9 +564,9 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
     );
 
     // Aggregate save writes year + deletes + re-inserts term in ONE transaction.
-    repo2.save(year);
-    check('year row persisted', ds2.exists('SELECT 1 FROM academic_years WHERE id = ?', ['iy-txn']));
-    check('term row persisted', ds2.exists('SELECT 1 FROM academic_terms WHERE id = ?', ['txn-term']));
+    await repo2.save(year);
+    check('year row persisted', await ds2.exists('SELECT 1 FROM academic_years WHERE id = ?', ['iy-txn']));
+    check('term row persisted', await ds2.exists('SELECT 1 FROM academic_terms WHERE id = ?', ['txn-term']));
 
     // Force a mid-transaction failure → nothing should persist.
     ds2.failNextTransaction = true;
@@ -577,12 +579,12 @@ const byGrade = curriculumRepo.getByGradeLevel(new GradeLevelId('grade-7'));
     });
     let threw = false;
     try {
-      repo2.save(y2);
+      await repo2.save(y2);
     } catch {
       threw = true;
     }
     check('second save throws on forced failure', threw);
-    check('no partial year persisted on failure', ds2.count('SELECT 1 FROM academic_years') === 1);
+    check('no partial year persisted on failure', await ds2.count('SELECT 1 FROM academic_years') === 1);
   }
 
   // ═════════════════════════════════════════════════════════════════════════

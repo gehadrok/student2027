@@ -3,9 +3,93 @@ import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import schemaSql from './sqlite-schema.sql?raw';
 import seedSql from './sqlite-seed.sql?raw';
 
+/**
+ * Server (Node) runtime support.
+ *
+ * The Academic REST API runs inside the Express server (bundled to CJS), while
+ * the rest of the SPA runs in the browser (Vite). The browser keeps using
+ * `localStorage` + the Vite-resolved `?url` WASM bundle exactly as before.
+ * In Node we instead: locate the sql.js WASM binary via `require.resolve`,
+ * persist the exported DB binary to a file under `data/`, and load the schema
+ * + seed content that the esbuild asset-loader now inlines into the server
+ * bundle. All Node-only globals are accessed only inside the guarded
+ * `getNodeRuntime()` path so the browser bundle is never affected.
+ */
+interface NodeRuntime {
+  fs: {
+    readFileSync: (p: string) => Buffer;
+    writeFileSync: (p: string, data: Buffer) => void;
+    mkdirSync: (p: string, opts?: { recursive?: boolean }) => void;
+    unlinkSync: (p: string) => void;
+  };
+  path: {
+    join: (...segments: string[]) => string;
+    dirname: (p: string) => string;
+  };
+  resolve: (id: string) => string;
+}
+
+function getNodeRuntime(): NodeRuntime | null {
+  if (typeof window !== 'undefined') return null;
+  try {
+    // eslint-disable-next-line no-undef
+    const req = typeof require !== 'undefined' ? require : undefined;
+    if (!req || typeof req.resolve !== 'function') return null;
+    return {
+      fs: req('fs'),
+      path: req('path'),
+      resolve: (id: string) => req.resolve(id),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const nodeRuntime = getNodeRuntime();
+
+function persistFilePath(): string {
+  return nodeRuntime!.path.join(process.cwd(), 'data', 'al-salam-server.db');
+}
+
+function resolveWasmLocator(): (file: string) => string {
+  if (nodeRuntime) {
+    try {
+      const wasmPath = nodeRuntime.resolve('sql.js/dist/sql-wasm.wasm');
+      if (wasmPath) return () => wasmPath;
+    } catch {
+      /* fall through to the bundled URL */
+    }
+  }
+  return () => sqlWasmUrl;
+}
+
+const wasmLocator = resolveWasmLocator();
+
 let SQL: SqlJsStatic | null = null;
 let dbInstance: Database | null = null;
 const DB_PERSIST_KEY = 'al_salam_school_sqlite_db_v1';
+
+/**
+ * Load a previously persisted database binary.
+ * - Node: reads the file under `data/`.
+ * - Browser: reads the base64 value from localStorage.
+ */
+function loadPersistedDB(): Uint8Array | null {
+  if (nodeRuntime) {
+    try {
+      return new Uint8Array(nodeRuntime.fs.readFileSync(persistFilePath()));
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const savedDbBase64 = localStorage.getItem(DB_PERSIST_KEY);
+    if (!savedDbBase64) return null;
+    return Uint8Array.from(atob(savedDbBase64), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
 
 export async function getSQLiteDB(): Promise<Database> {
   if (dbInstance) return dbInstance;
@@ -14,7 +98,7 @@ export async function getSQLiteDB(): Promise<Database> {
     if (!SQL) {
       try {
         SQL = await initSqlJs({
-          locateFile: () => sqlWasmUrl
+          locateFile: wasmLocator
         });
       } catch (e1) {
         console.warn('⚠️ Local WASM bundle load failed, trying cdnjs fallback...', e1);
@@ -31,15 +115,14 @@ export async function getSQLiteDB(): Promise<Database> {
       }
     }
 
-    // Check if persisted database binary exists in LocalStorage
-    const savedDbBase64 = localStorage.getItem(DB_PERSIST_KEY);
-    if (savedDbBase64) {
+    // Check if a persisted database binary already exists
+    const savedDbBinary = loadPersistedDB();
+    if (savedDbBinary) {
       try {
-        const binary = Uint8Array.from(atob(savedDbBase64), c => c.charCodeAt(0));
-        dbInstance = new SQL.Database(binary);
+        dbInstance = new SQL.Database(savedDbBinary);
         // Ensure pragma foreign keys is ON
         dbInstance.run('PRAGMA foreign_keys = ON;');
-        console.log('✅ SQLite Database loaded successfully from local persistence.');
+        console.log(`✅ SQLite Database loaded successfully from ${nodeRuntime ? 'file persistence' : 'local persistence'}.`);
         return dbInstance;
       } catch (err) {
         console.warn('⚠️ Failed to parse saved SQLite DB binary. Re-initializing fresh DB...', err);
@@ -68,12 +151,20 @@ export async function getSQLiteDB(): Promise<Database> {
 }
 
 /**
- * Persist SQLite Database binary state to LocalStorage
+ * Persist SQLite Database binary state.
+ * - Node: writes the binary to `data/al-salam-server.db`.
+ * - Browser: stores a base64 value in localStorage.
  */
 export function persistSQLiteDB(): void {
   if (!dbInstance) return;
   try {
     const data = dbInstance.export();
+    if (nodeRuntime) {
+      const filePath = persistFilePath();
+      nodeRuntime.fs.mkdirSync(nodeRuntime.path.dirname(filePath), { recursive: true });
+      nodeRuntime.fs.writeFileSync(filePath, Buffer.from(data));
+      return;
+    }
     // Convert Uint8Array to base64 string
     let binary = '';
     const bytes = new Uint8Array(data);
@@ -92,7 +183,15 @@ export function persistSQLiteDB(): void {
  * Reset and reload fresh database from schema & seed
  */
 export async function resetSQLiteDBToSeed(): Promise<Database> {
-  localStorage.removeItem(DB_PERSIST_KEY);
+  if (nodeRuntime) {
+    try {
+      nodeRuntime.fs.unlinkSync(persistFilePath());
+    } catch {
+      /* file does not exist — fine */
+    }
+  } else {
+    localStorage.removeItem(DB_PERSIST_KEY);
+  }
   if (dbInstance) {
     dbInstance.close();
     dbInstance = null;
@@ -199,6 +298,33 @@ export function commitTransaction(): void {
 export function rollbackTransaction(): void {
   if (!dbInstance) return;
   dbInstance.run('ROLLBACK;');
+}
+
+/**
+ * Execute multiple SQL statements inside an async transaction.
+ * Auto-commits on success, rollbacks on any failure.
+ */
+export async function runTransaction(
+  queries: Array<{ sql: string; params?: any[] }>
+): Promise<{ success: boolean; error?: string }> {
+  const db = await getSQLiteDB();
+  try {
+    db.run('BEGIN TRANSACTION;');
+    for (const q of queries) {
+      db.run(q.sql, q.params || []);
+    }
+    db.run('COMMIT;');
+    persistSQLiteDB();
+    return { success: true };
+  } catch (err: any) {
+    try {
+      db.run('ROLLBACK;');
+    } catch {
+      /* ignore rollback failure */
+    }
+    console.error('Transaction failed, rolled back:', err);
+    return { success: false, error: err.message || 'Transaction failed' };
+  }
 }
 
 /**

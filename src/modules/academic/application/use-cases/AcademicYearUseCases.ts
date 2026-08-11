@@ -33,10 +33,10 @@ export class AcademicYearUseCases {
    * Create an academic year and optionally add its initial terms in one
    * orchestrated workflow.
    */
-  createWithTerms(command: CreateAcademicYearWithTermsCommand): AcademicYearDto {
-    let dto = this.service.create(command.year);
+  async createWithTerms(command: CreateAcademicYearWithTermsCommand): Promise<AcademicYearDto> {
+    let dto = await this.service.create(command.year);
     for (const term of command.terms) {
-      dto = this.service.addTerm({
+      dto = await this.service.addTerm({
         academicYearId: dto.id,
         changedBy: command.year.createdBy,
         ...term,
@@ -48,30 +48,30 @@ export class AcademicYearUseCases {
   /**
    * Run the full lifecycle to the given target status.
    */
-  progressToActive(
+  async progressToActive(
     create: CreateAcademicYearCommand,
     terms: Omit<AddAcademicTermCommand, 'academicYearId' | 'changedBy'>[]
-  ): AcademicYearDto {
-    let dto = this.createWithTerms({ year: create, terms });
+  ): Promise<AcademicYearDto> {
+    let dto = await this.createWithTerms({ year: create, terms });
     const by = create.createdBy;
-    dto = this.service.approve({ academicYearId: dto.id, changedBy: by });
-    dto = this.service.activate({ academicYearId: dto.id, changedBy: by });
+    dto = await this.service.approve({ academicYearId: dto.id, changedBy: by });
+    dto = await this.service.activate({ academicYearId: dto.id, changedBy: by });
     return dto;
   }
 
-  approve(command: ApproveAcademicYearCommand): AcademicYearDto {
+  async approve(command: ApproveAcademicYearCommand): Promise<AcademicYearDto> {
     return this.service.approve(command);
   }
 
-  activate(command: ActivateAcademicYearCommand): AcademicYearDto {
+  async activate(command: ActivateAcademicYearCommand): Promise<AcademicYearDto> {
     return this.service.activate(command);
   }
 
-  close(command: CloseAcademicYearCommand): AcademicYearDto {
+  async close(command: CloseAcademicYearCommand): Promise<AcademicYearDto> {
     return this.service.close(command);
   }
 
-  archive(command: ArchiveAcademicYearCommand): AcademicYearDto {
+  async archive(command: ArchiveAcademicYearCommand): Promise<AcademicYearDto> {
     return this.service.archive(command);
   }
 }
