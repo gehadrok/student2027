@@ -39,13 +39,13 @@ export class AuthService implements IAuthProvider {
       }
 
       const user = users[0];
-      const isValid = this.hashService.verify(request.password, user.password_hash);
+      const isValid = await this.hashService.verify(request.password, user.password_hash);
 
       if (!isValid) {
         return { success: false, error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' };
       }
 
-      const token = this.tokenService.generate({
+      const token = await this.tokenService.generate({
         userId: user.id,
         role: user.role,
         email: user.email,
@@ -57,7 +57,6 @@ export class AuthService implements IAuthProvider {
         name: user.name,
         email: user.email,
         role: user.role,
-        passwordHash: user.password_hash,
       };
 
       this.logger.info(`User logged in: ${user.name} (${user.role})`);
@@ -65,6 +64,7 @@ export class AuthService implements IAuthProvider {
         success: true,
         userId: user.id,
         name: user.name,
+        email: user.email,
         role: user.role,
         token,
       };
@@ -92,7 +92,7 @@ export class AuthService implements IAuthProvider {
     // Re-query user to get updated data
     try {
       const users = await this.dataSource.query<any>(
-        'SELECT id, name, email, role, password_hash FROM users WHERE id = ? AND status = ?',
+        'SELECT id, name, email, role FROM users WHERE id = ? AND status = ?',
         [this.currentUser.id, 'active']
       );
       if (users.length === 0) {

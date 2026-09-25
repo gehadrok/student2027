@@ -4,21 +4,24 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx --loader ./scripts/asset-loader.mjs server.ts",
     "build": "vite build && node scripts/build-server.mjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test src/lib/api/ApiClient.test.ts src/lib/auth/capabilities.test.ts src/lib/auth/contract.test.ts src/lib/auth/realAuthGateway.test.ts src/lib/runtime/mode.test.ts src/modules/master-data/api/masterDataRestRepository.test.ts src/modules/master-data/repository/masterDataRepositoryProvider.test.ts src/core/auth/AuthService.security.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/pg": "^8.23.1",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",

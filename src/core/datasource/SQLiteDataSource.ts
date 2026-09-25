@@ -4,13 +4,25 @@
  */
 
 import { IDataSource } from './IDataSource';
-import {
-  getSQLiteDB,
-  querySql,
-  queryOneSql,
-  runSql,
-  runTransaction,
-} from '../../lib/sqlite-engine';
+
+/**
+ * The `sqlite-engine` module pulls in `sql.js` via Vite-only `?url`/`?raw`
+ * imports that are incompatible with the Node/tsx test runtime. To keep the
+ * PostgreSQL live-verification harness loadable under `tsx` (which imports this
+ * file transitively through `DataSourceFactory`), the engine is imported
+ * lazily and only when a SQLite operation is actually invoked. The browser
+ * (Vite) and the esbuild server bundle resolve the dynamic import normally;
+ * the live tests run exclusively against `PostgreSQLDataSource`, so the engine
+ * is never loaded in that path. This is a compatibility shim only — no
+ * functionality is removed.
+ */
+let engineCache: typeof import('../../lib/sqlite-engine') | null = null;
+async function getEngine(): Promise<typeof import('../../lib/sqlite-engine')> {
+  if (!engineCache) {
+    engineCache = await import('../../lib/sqlite-engine');
+  }
+  return engineCache;
+}
 
 /**
  * SQLite implementation of IDataSource.
@@ -18,18 +30,22 @@ import {
  */
 export class SQLiteDataSource implements IDataSource {
   async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
+    const { querySql } = await getEngine();
     return querySql<T>(sql, params || []);
   }
 
   async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+    const { queryOneSql } = await getEngine();
     return queryOneSql<T>(sql, params || []);
   }
 
   async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number }> {
+    const { runSql } = await getEngine();
     return runSql(sql, params || []);
   }
 
   async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<{ success: boolean; error?: string }> {
+    const { runTransaction } = await getEngine();
     return runTransaction(queries);
   }
 
@@ -68,18 +84,20 @@ export class SQLiteDataSource implements IDataSource {
   }
 
   async beginTransaction(): Promise<void> {
+    const { getSQLiteDB } = await getEngine();
     const db = await getSQLiteDB();
     db.run('BEGIN TRANSACTION;');
   }
 
   async commit(): Promise<void> {
+    const { getSQLiteDB } = await getEngine();
     const db = await getSQLiteDB();
     db.run('COMMIT;');
   }
 
   async rollback(): Promise<void> {
+    const { getSQLiteDB } = await getEngine();
     const db = await getSQLiteDB();
     db.run('ROLLBACK;');
   }
 }
-

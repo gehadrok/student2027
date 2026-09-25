@@ -20,6 +20,7 @@ export interface IMasterDataRepository {
   update(entityType: string, id: string, data: Record<string, any>): Promise<any | null>;
   delete(entityType: string, id: string): Promise<boolean>;
   bulkDelete(entityType: string, ids: string[]): Promise<{ success: number; failed: number; errors: string[] }>;
+  bulkCreate(entityType: string, rows: Record<string, any>[], auditUser?: string): Promise<{ success: number; failed: number; errors: string[] }>;
   isFieldUnique(entityType: string, field: string, value: string, excludeId?: string): Promise<boolean>;
   logAudit(entry: Omit<MasterDataAuditLog, 'id' | 'performed_at'>): Promise<void>;
   getAuditLogs(entityType?: string, limit?: number): Promise<MasterDataAuditLog[]>;

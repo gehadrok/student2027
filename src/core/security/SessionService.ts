@@ -32,8 +32,8 @@ export class SessionService {
   /**
    * Create a new session for a user.
    */
-  create(user: Omit<TokenPayload, 'iat' | 'exp'>): Session {
-    const token = this.tokenService.generate(user);
+  async create(user: Omit<TokenPayload, 'iat' | 'exp'>): Promise<Session> {
+    const token = await this.tokenService.generate(user);
     const now = new Date().toISOString();
     const decoded = this.tokenService.decode(token);
 
@@ -55,7 +55,7 @@ export class SessionService {
   /**
    * Get the current session.
    */
-  get(): Session | null {
+  async get(): Promise<Session | null> {
     try {
       const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return null;
@@ -74,7 +74,7 @@ export class SessionService {
       }
 
       // Verify token
-      const verified = this.tokenService.verify(session.token);
+      const verified = await this.tokenService.verify(session.token);
       if (!verified) {
         this.destroy();
         this.logger.warn('Session token invalid');
@@ -90,8 +90,8 @@ export class SessionService {
   /**
    * Update the last activity timestamp.
    */
-  touch(): void {
-    const session = this.get();
+  async touch(): Promise<void> {
+    const session = await this.get();
     if (session) {
       session.lastActivity = new Date().toISOString();
       this.persist(session);
@@ -109,23 +109,23 @@ export class SessionService {
   /**
    * Check if a session exists and is valid.
    */
-  isAuthenticated(): boolean {
-    return this.get() !== null;
+  async isAuthenticated(): Promise<boolean> {
+    return (await this.get()) !== null;
   }
 
   /**
    * Get the current user from the session.
    */
-  getCurrentUser(): TokenPayload | null {
-    const session = this.get();
+  async getCurrentUser(): Promise<TokenPayload | null> {
+    const session = await this.get();
     return session?.user || null;
   }
 
   /**
    * Check if the current user has a specific role.
    */
-  hasRole(role: string): boolean {
-    const user = this.getCurrentUser();
+  async hasRole(role: string): Promise<boolean> {
+    const user = await this.getCurrentUser();
     return user?.role === role;
   }
 

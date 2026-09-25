@@ -12,6 +12,7 @@ export interface AuthResult {
   success: boolean;
   userId?: string;
   name?: string;
+  email?: string;
   role?: string;
   token?: string;
   error?: string;
@@ -22,7 +23,12 @@ export interface UserCredentials {
   name: string;
   email: string;
   role: string;
-  passwordHash: string;
+  /**
+   * Present only when the credential is resolved server-side for verification.
+   * It must NEVER be returned to or persisted on the client (see PG-0 security
+   * fix / D4). Made optional so the in-memory current user does not carry it.
+   */
+  passwordHash?: string;
 }
 
 /**

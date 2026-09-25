@@ -32,10 +32,10 @@ export class FinancialRepository implements IFinancialRepository {
       studentId: r.student_id,
       receiptNumber: r.receipt_number || undefined,
       title: r.title,
-      totalAmount: r.total_amount,
-      amount: r.total_amount,
-      paidAmount: r.paid_amount,
-      remainingAmount: r.remaining_amount,
+      totalAmount: Number(r.total_amount),
+      amount: Number(r.total_amount),
+      paidAmount: Number(r.paid_amount),
+      remainingAmount: Number(r.remaining_amount),
       dueDate: r.due_date,
       paidDate: r.paid_date || undefined,
       status: r.status,
@@ -47,7 +47,7 @@ export class FinancialRepository implements IFinancialRepository {
   async getAllExpenses(): Promise<ExpenseRecord[]> {
     const rows = await this.dataSource.query<any>(
       `SELECT id, voucher_number, category, title, amount, date, beneficiary, approved_by, notes
-       FROM expense_records ORDER BY date DESC`
+        FROM expense_records ORDER BY date DESC`
     );
 
     return rows.map((r: any) => ({
@@ -55,7 +55,7 @@ export class FinancialRepository implements IFinancialRepository {
       voucherNumber: r.voucher_number,
       category: r.category,
       title: r.title,
-      amount: r.amount,
+      amount: Number(r.amount),
       date: r.date,
       beneficiary: r.beneficiary,
       approvedBy: r.approved_by,

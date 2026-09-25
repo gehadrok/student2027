@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserRole } from '../types';
+import { rolesWithCapability, type Capability } from '../lib/auth/capabilities';
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, Calendar, CalendarDays,
   UserCheck, Award, DollarSign, PieChart, Settings, Bell, Sparkles,
@@ -11,6 +12,7 @@ interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   userRole?: UserRole;
+  canAccess?: (capability: string) => boolean;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   isOpen?: boolean;
@@ -21,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   userRole = 'admin',
+  canAccess,
   isCollapsed = false,
   onToggleCollapse = () => {},
   isOpen = false,
@@ -30,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     id: string;
     label: string;
     icon: React.ReactNode;
-    roles: UserRole[];
+    capability: Capability;
     badge?: string;
   }
 
@@ -39,122 +42,125 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'dashboard',
       label: 'لوحة التحكم',
       icon: <LayoutDashboard className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:dashboard:read'
     },
     {
       id: 'master-data',
       label: 'مركز البيانات الأساسية',
       icon: <Database className="w-5 h-5" />,
-      roles: ['admin'],
+      capability: 'ui:master-data:read',
       badge: 'جديد'
     },
     {
       id: 'academic',
       label: 'المركز الأكاديمي',
       icon: <School className="w-5 h-5" />,
-      roles: ['admin'],
+      capability: 'ui:academic:read',
       badge: 'جديد'
     },
     {
       id: 'students',
       label: userRole === 'parent' ? 'متابعة الأبناء' : userRole === 'teacher' ? 'طلاب فصولي' : 'إدارة الطلاب',
       icon: <Users className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'parent']
+      capability: 'ui:students:read'
     },
     {
       id: 'classes',
       label: 'الفصول والشعب',
       icon: <Layers className="w-5 h-5" />,
-      roles: ['admin']
+      capability: 'ui:classes:read'
     },
     {
       id: 'teachers',
       label: 'إدارة المدرسين',
       icon: <GraduationCap className="w-5 h-5" />,
-      roles: ['admin']
+      capability: 'ui:teachers:read'
     },
     {
       id: 'subjects',
       label: 'المواد الدراسية',
       icon: <BookOpen className="w-5 h-5" />,
-      roles: ['admin']
+      capability: 'ui:subjects:read'
     },
     {
       id: 'timetable',
       label: userRole === 'student' ? 'جدولي الدراسي' : 'الحصص والجداول',
       icon: <Calendar className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:timetable:read'
     },
     {
       id: 'calendar',
       label: 'التقويم والأجندة',
       icon: <CalendarDays className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:calendar:read'
     },
     {
       id: 'attendance',
       label: userRole === 'student' ? 'سجل الحضور' : userRole === 'parent' ? 'حضور الأبناء' : 'الحضور والغياب',
       icon: <UserCheck className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:attendance:read'
     },
     {
       id: 'grades',
       label: userRole === 'student' ? 'درجاتي ونتائجي' : userRole === 'parent' ? 'درجات الأبناء' : 'رصد الدرجات',
       icon: <FileText className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:grades:read'
     },
     {
       id: 'certificates',
       label: userRole === 'student' ? 'شهاداتي التقديرية' : 'إصدار الشهادات',
       icon: <Award className="w-5 h-5" />,
-      roles: ['admin', 'student']
+      capability: 'ui:certificates:read'
     },
     {
       id: 'financial',
       label: userRole === 'parent' ? 'الأقساط والرسوم' : 'الإدارة المالية',
       icon: <DollarSign className="w-5 h-5" />,
-      roles: ['admin', 'parent']
+      capability: 'ui:financial:read'
     },
     {
       id: 'library',
       label: userRole === 'student' ? 'المكتبة واستعاراتي' : 'المكتبة المدرسية',
       icon: <Library className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:library:read'
     },
     {
       id: 'documents',
       label: 'مركز الملفات والوثائق',
       icon: <FolderArchive className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:documents:read'
     },
     {
       id: 'reports',
       label: 'التقارير والإحصائيات',
       icon: <PieChart className="w-5 h-5" />,
-      roles: ['admin']
+      capability: 'ui:reports:read'
     },
     {
       id: 'ai-insights',
       label: 'التحليلات الذكية AI',
       icon: <Sparkles className="w-5 h-5 text-amber-400" />,
-      roles: ['admin', 'teacher'],
+      capability: 'ui:ai-insights:read',
       badge: 'جديد'
     },
     {
       id: 'notifications',
       label: 'مركز الإشعارات',
       icon: <Bell className="w-5 h-5" />,
-      roles: ['admin', 'teacher', 'student', 'parent']
+      capability: 'ui:notifications:read'
     },
     {
       id: 'settings',
       label: 'الإعدادات والنظام',
       icon: <Settings className="w-5 h-5" />,
-      roles: ['admin']
+      capability: 'ui:settings:read'
     }
   ];
 
-  const filteredItems = navItems.filter(item => item.roles.includes(userRole as UserRole));
+  const filteredItems = navItems.filter(item => {
+    if (canAccess) return canAccess(item.capability);
+    return rolesWithCapability(item.capability).includes(userRole as UserRole);
+  });
 
   return (
     <>

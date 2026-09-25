@@ -1,33 +1,26 @@
 import React from 'react';
-import { UserRole, User } from '../types';
-import { getRealmDB, setCurrentUser } from '../lib/db';
+import { UserRole } from '../types';
 import { Shield, GraduationCap, UserCheck, Users, X, RefreshCw } from 'lucide-react';
 
 interface SwitchUserModalProps {
   isOpen?: boolean;
   onClose: () => void;
   onUserSwitched?: () => void;
-  onSelectUser?: (user: User) => void;
+  onSelectRole?: (role: UserRole) => void | Promise<void>;
 }
 
 export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
   isOpen = true,
   onClose,
   onUserSwitched,
-  onSelectUser
+  onSelectRole
 }) => {
-  const db = getRealmDB();
-
   if (!isOpen) return null;
 
-  const handleSelectRole = (role: UserRole) => {
-    const user = db.users.find(u => u.role === role);
-    if (user) {
-      setCurrentUser(user);
-      onSelectUser?.(user);
-      onUserSwitched?.();
-      onClose();
-    }
+  const handleSelectRole = async (role: UserRole) => {
+    await onSelectRole?.(role);
+    onUserSwitched?.();
+    onClose();
   };
 
   return (

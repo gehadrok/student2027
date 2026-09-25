@@ -235,14 +235,14 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onNavigate }) 
             </div>
           </div>
 
-          {activeStudent.healthNotes && (
+          {activeStudent?.healthNotes && (
             <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 space-y-2 text-xs">
               <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
                 <Heart className="w-5 h-5 text-red-500" />
                 <span>الملف الصحي للمدرسة</span>
               </div>
               <p className="text-slate-700 leading-relaxed font-medium">
-                تنبيه مسجل في ملف ابنكم: <strong className="text-red-700">{activeStudent.healthNotes}</strong>. تحرص المدرسة دائماً على مراعاة كافة الاشتراطات الصحية لسلامته.
+                تنبيه مسجل في ملف ابنكم: <strong className="text-red-700">{activeStudent?.healthNotes}</strong>. تحرص المدرسة دائماً على مراعاة كافة الاشتراطات الصحية لسلامته.
               </p>
             </div>
           )}

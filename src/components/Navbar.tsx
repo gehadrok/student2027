@@ -1,11 +1,14 @@
 import React from 'react';
-import { User, SchoolSettings, UserRole } from '../types';
+import { SchoolSettings, UserRole } from '../types';
+import type { AuthUser } from '../lib/auth/contract';
+import type { IntegrationMode } from '../lib/runtime/mode';
 import { Bell, LogOut, RefreshCw, Shield, GraduationCap, Users, UserCheck, Sparkles, Menu } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar';
 
 interface NavbarProps {
-  currentUser: User | null;
-  settings: SchoolSettings;
+  currentUser: AuthUser | null;
+  mode?: IntegrationMode;
+  settings?: SchoolSettings;
   unreadNotifsCount: number;
   onLogout: () => void;
   onOpenNotifications: () => void;
@@ -17,6 +20,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
+  mode = 'mock',
   settings,
   unreadNotifsCount,
   onLogout,
@@ -134,14 +138,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Fast switch user modal for testing MVP */}
-              <button
-                onClick={onSwitchUserModal}
-                className="p-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1 border border-slate-200 ml-1 cursor-pointer"
-                title="تبديل الحساب لتجربة دور آخر (المدير، المعلم، الطالب، ولي الأمر)"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">تبديل الدور</span>
-              </button>
+              {mode === 'mock' && (
+                <button
+                  onClick={onSwitchUserModal}
+                  className="p-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1 border border-slate-200 ml-1 cursor-pointer"
+                  title="تبديل الحساب لتجربة دور آخر (المدير، المعلم، الطالب، ولي الأمر)"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">تبديل الدور</span>
+                </button>
+              )}
 
               <button
                 onClick={onLogout}

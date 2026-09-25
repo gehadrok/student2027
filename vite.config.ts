@@ -11,6 +11,17 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    // `pg` is a Node-only dependency used by PostgreSQLDataSource, which is
+    // loaded via dynamic import only when DATA_SOURCE_TYPE=postgresql (server
+    // context). Externalizing it keeps it out of the browser SPA bundle.
+    optimizeDeps: {
+      exclude: ['pg'],
+    },
+    build: {
+      rollupOptions: {
+        external: ['pg'],
+      },
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

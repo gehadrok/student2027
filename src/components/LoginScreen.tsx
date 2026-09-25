@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { User, SchoolSettings } from '../types';
-import { getRealmDB, setCurrentUser, addAuditLog } from '../lib/db';
+import { SchoolSettings } from '../types';
+import { addAuditLog } from '../lib/db';
+import { MOCK_DEMO_PASSWORD, useAuth, type UserRole } from '../lib/auth';
 import { Shield, GraduationCap, UserCheck, Users, Lock, Mail, ArrowLeft, KeyRound, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface LoginScreenProps {
-  settings: SchoolSettings;
-  onLoginSuccess: (user: User) => void;
+  settings?: SchoolSettings;
+  onLoginSuccess?: (email: string, password: string) => void | Promise<void>;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ settings, onLoginSuccess }) => {
+  const { login, switchRole, mode } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,48 +18,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ settings, onLoginSucce
   const [forgotModal, setForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const isMock = mode === 'mock';
 
-  const db = getRealmDB();
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    setTimeout(() => {
-      const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
-      if (!user) {
-        setError('البريد الإلكتروني أو الحساب غير موجود في النظام.');
-        setLoading(false);
-        return;
-      }
-
-      // Hashed password check simulation
-      if (user.passwordHash !== `hash_${password}` && password !== '123456') {
-        setError('كلمة المرور غير صحيحة. (استخدم 123456 للتجربة)');
-        setLoading(false);
-        return;
-      }
-
-      if (user.status === 'suspended') {
-        setError('هذا الحساب موقوف حالياً من قبل الإدارة.');
-        setLoading(false);
-        return;
-      }
-
-      user.lastLogin = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      setCurrentUser(user);
-      onLoginSuccess(user);
+    try {
+      await login({ email, password });
+      await onLoginSuccess?.(email, password);
+    } catch (err: any) {
+      setError(err?.failure?.message || err?.message || 'تعذر تسجيل الدخول.');
       setLoading(false);
-    }, 500);
+    }
   };
 
-  const handleQuickDemoLogin = (role: 'admin' | 'teacher' | 'student' | 'parent') => {
-    const demoUser = db.users.find(u => u.role === role);
-    if (demoUser) {
-      demoUser.lastLogin = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      setCurrentUser(demoUser);
-      onLoginSuccess(demoUser);
+  const handleQuickDemoLogin = async (role: UserRole) => {
+    try {
+      await switchRole(role);
+      await onLoginSuccess?.('', '');
+    } catch (err: any) {
+      setError(err?.failure?.message || err?.message || 'تعذر تبديل الدور.');
     }
   };
 
@@ -96,6 +78,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ settings, onLoginSucce
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg z-10 px-4">
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl py-8 px-6 sm:px-10 backdrop-blur-xl">
+          {isMock && (
+          <>
           {/* Quick Demo Login Cards for MVP Evaluation */}
           <div className="mb-8 pb-8 border-b border-slate-800">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center mb-4 flex items-center justify-center gap-2">
@@ -152,6 +136,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ settings, onLoginSucce
               </button>
             </div>
           </div>
+          </>
+          )}
 
           {/* Standard Form Login */}
           <form className="space-y-5" onSubmit={handleLogin}>
@@ -207,7 +193,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ settings, onLoginSucce
                   className="w-full pl-3 pr-10 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">ملاحظة: كافة كلمات المرور النموذجية هي: <code className="text-amber-400 bg-slate-800 px-1 rounded">123456</code></p>
+              {isMock && <p className="text-[11px] text-slate-500 mt-1">ملاحظة: كافة كلمات المرور النموذجية هي: <code className="text-amber-400 bg-slate-800 px-1 rounded">{MOCK_DEMO_PASSWORD}</code></p>}
             </div>
 
             <button

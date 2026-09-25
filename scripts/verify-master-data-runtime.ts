@@ -105,7 +105,11 @@ class RealSQLiteDataSource implements IDataSource {
   }
 
   async count(sql: string, params?: any[]): Promise<number> {
-    return (await this.query(sql, params)).length;
+    const rows = await this.query(sql, params);
+    if (rows.length === 0) return 0;
+    const first = rows[0] as Record<string, any>;
+    const key = Object.keys(first)[0];
+    return Number(first[key]) || 0;
   }
 
   async exists(sql: string, params?: any[]): Promise<boolean> {

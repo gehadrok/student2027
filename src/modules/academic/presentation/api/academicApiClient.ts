@@ -17,6 +17,8 @@
  * the backend DTOs and surfaces backend error envelopes.
  */
 
+import { apiClient, type HttpMethod } from '../../../../lib/api';
+import { ApiError } from '../../../../lib/api/errors';
 import {
   AcademicYearApi,
   AcademicYearSummaryApi,
@@ -30,46 +32,26 @@ import {
   SaveCourseAssignmentPayload,
   AcademicCalendarApi,
   SaveAcademicCalendarPayload,
-  ApiErrorEnvelope,
 } from '../types';
 
 const BASE = '/api/academic';
 
-/** Thrown when the backend returns a non-2xx status with an error envelope. */
-export class AcademicApiError extends Error {
-  readonly status: number;
-
+export class AcademicApiError extends ApiError {
   constructor(status: number, message: string) {
-    super(message);
+    super(status, message);
     this.name = 'AcademicApiError';
-    this.status = status;
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
-  const text = await res.text();
-  let parsed: unknown = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = text;
+async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+  try {
+    return await apiClient.request<T>(`${BASE}${path}`, { method, body });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new AcademicApiError(error.status, error.message);
     }
+    throw error;
   }
-
-  if (!res.ok) {
-    const envelope = (parsed ?? {}) as ApiErrorEnvelope;
-    const message = envelope.error || `طلب فشل (${res.status})`;
-    throw new AcademicApiError(res.status, message);
-  }
-
-  return parsed as T;
 }
 
 // ── AcademicYear lifecycle ─────────────────────────────────────────────────

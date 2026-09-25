@@ -1,7 +1,11 @@
-/**
+﻿/**
  * Master Data Service - Business Logic Layer
  */
-import { masterDataRepository } from '../repository/masterDataRepository';
+import type { IMasterDataRepository } from '../../../core/repositories/IMasterDataRepository';
+import {
+  getMasterDataRepository,
+  isServerSidePaginated,
+} from '../repository/masterDataRepositoryProvider';
 import {
   MasterDataEntity,
   MasterDataFilter,
@@ -14,7 +18,18 @@ import {
 import { validateMasterData } from '../validators';
 import { generateId, getCurrentUserName, getCurrentUserId } from '../utils';
 
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export class MasterDataService {
+
+  private readonly repository: IMasterDataRepository;
+
+  constructor(repository: IMasterDataRepository = getMasterDataRepository()) {
+    this.repository = repository;
+  }
 
   /**
    * Get paginated data for any entity type
@@ -26,7 +41,14 @@ export class MasterDataService {
     const page = filter.page || 1;
     const pageSize = filter.pageSize || 25;
 
-    const paginated = await masterDataRepository.getAll(entityType, filter);
+    const paginated = await this.repository.getAll(entityType, filter);
+
+    // In Real Mode the backend already applied page/size/search/filter/sort,
+    // so the result is returned as-is instead of being processed twice.
+    if (isServerSidePaginated(this.repository)) {
+      return paginated as PaginatedResult<T>;
+    }
+
     let data = paginated.data as T[];
 
     // Search
@@ -80,14 +102,14 @@ export class MasterDataService {
     entityType: string,
     activeOnly: boolean = true
   ): Promise<T[]> {
-    return (await masterDataRepository.getAllFlat(entityType, activeOnly)) as T[];
+    return (await this.repository.getAllFlat(entityType, activeOnly)) as T[];
   }
 
   /**
    * Get single record by ID
    */
   async getById<T extends MasterDataEntity>(entityType: string, id: string): Promise<T | null> {
-    return (await masterDataRepository.getById(entityType, id)) as T | null;
+    return (await this.repository.getById(entityType, id)) as T | null;
   }
 
   /**
@@ -119,7 +141,11 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    await masterDataRepository.create(entityType, record as any);
+    try {
+      await this.repository.create(entityType, record as any);
+    } catch (error) {
+      return { success: false, errors: [{ field: '', message: errorMessage(error, 'تعذر إنشاء السجل') }] };
+    }
 
     // Audit log
     await this.logAudit(entityType, (record as any).id, 'CREATE', null, record, userName);
@@ -163,7 +189,11 @@ export class MasterDataService {
       updated_by: userId,
     } as unknown as T;
 
-    await masterDataRepository.update(entityType, id, updated as any);
+    try {
+      await this.repository.update(entityType, id, updated as any);
+    } catch (error) {
+      return { success: false, errors: [{ field: '', message: errorMessage(error, 'تعذر تحديث السجل') }] };
+    }
 
     // Audit log
     await this.logAudit(entityType, id, 'UPDATE', current, updated, userName);
@@ -178,12 +208,16 @@ export class MasterDataService {
     entityType: string,
     id: string
   ): Promise<{ success: boolean; error?: string }> {
-    const current = await this.getById(entityType, id);
+    const current = await this.getById<MasterDataEntity>(entityType, id);
     if (!current) {
       return { success: false, error: 'السجل غير موجود' };
     }
 
-    await masterDataRepository.delete(entityType, id);
+    try {
+      await this.repository.delete(entityType, id);
+    } catch (error) {
+      return { success: false, error: errorMessage(error, 'تعذر حذف السجل') };
+    }
 
     // Audit log
     const userName = getCurrentUserName();
@@ -312,7 +346,7 @@ export class MasterDataService {
         ip_address: null,
         details: null
       };
-      await masterDataRepository.logAudit(log as any);
+      await this.repository.logAudit(log as any);
     } catch (err) {
       console.error('Failed to log audit:', err);
     }
@@ -322,9 +356,10 @@ export class MasterDataService {
    * Get audit logs for a specific entity
    */
   async getAuditLogs(entityType?: string, limit: number = 50): Promise<MasterDataAuditLog[]> {
-    return masterDataRepository.getAuditLogs(entityType, limit);
+    return this.repository.getAuditLogs(entityType, limit);
   }
 }
 
 export const masterDataService = new MasterDataService();
+
 

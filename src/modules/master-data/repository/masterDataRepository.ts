@@ -16,7 +16,7 @@ import { DataSourceFactory } from '../../../core/datasource/DataSourceFactory';
 /**
  * Map of entity type -> table name in DB
  */
-const TABLE_MAP: Record<string, string> = {
+export const TABLE_MAP: Record<string, string> = {
   academic_years: 'academic_years',
   academic_terms: 'academic_terms',
   education_stages: 'education_stages',
@@ -156,14 +156,31 @@ export class MasterDataRepository implements IMasterDataRepository {
     return !(await this.dataSource.exists(sql, params));
   }
 
-  async create(entityType: string, data: Record<string, any>): Promise<any | null> {
+  async create(entityType: string, data: Record<string, any>, auditUser?: string): Promise<any | null> {
     const table = TABLE_MAP[entityType];
     if (!table) return null;
 
+    const { sql, values, id } = this.buildInsert(entityType, data, auditUser);
+    await this.dataSource.execute(sql, values);
+
+    return this.getById(entityType, id);
+  }
+
+  /**
+   * Build a parameterized INSERT for an entity. Centralized so that both the
+   * single-row `create` and the transactional `bulkCreate` share identical
+   * column handling (id, timestamps, audit columns, null coercion).
+   */
+  private buildInsert(
+    entityType: string,
+    data: Record<string, any>,
+    auditUser?: string,
+  ): { sql: string; values: any[]; id: string } {
+    const table = TABLE_MAP[entityType];
     const id = data.id || generateId();
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const userId = getCurrentUserId();
-    const userName = getCurrentUserName();
+    const userId = auditUser ?? getCurrentUserId();
+    const userName = auditUser ?? getCurrentUserName();
 
     const fields: string[] = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by'];
     const values: any[] = [id, now, now, userName, userId];
@@ -177,12 +194,10 @@ export class MasterDataRepository implements IMasterDataRepository {
     }
 
     const sql = `INSERT INTO ${table} (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`;
-    await this.dataSource.execute(sql, values);
-
-    return this.getById(entityType, id);
+    return { sql, values, id };
   }
 
-  async update(entityType: string, id: string, data: Record<string, any>): Promise<any | null> {
+  async update(entityType: string, id: string, data: Record<string, any>, auditUser?: string): Promise<any | null> {
     const table = TABLE_MAP[entityType];
     if (!table) return null;
 
@@ -190,7 +205,7 @@ export class MasterDataRepository implements IMasterDataRepository {
     if (!existing) return null;
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const userName = getCurrentUserName();
+    const userName = auditUser ?? getCurrentUserName();
 
     const setClauses: string[] = ['updated_at = ?', 'updated_by = ?'];
     const values: any[] = [now, userName];
@@ -206,6 +221,33 @@ export class MasterDataRepository implements IMasterDataRepository {
     await this.dataSource.execute(sql, values);
 
     return this.getById(entityType, id);
+  }
+
+  /**
+   * Insert many rows inside a single transaction. If any row violates a
+   * constraint the whole batch is rolled back (PostgreSQLDataSource.transaction
+   * issues ROLLBACK and returns success:false). Used by the Master Data REST
+   * bulk endpoint to guarantee all-or-nothing semantics.
+   */
+  async bulkCreate(
+    entityType: string,
+    rows: Record<string, any>[],
+    auditUser?: string,
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
+    const table = TABLE_MAP[entityType];
+    if (!table) return { success: 0, failed: rows.length, errors: ['Invalid entity type'] };
+
+    const queries: Array<{ sql: string; params?: any[] }> = [];
+    for (const row of rows) {
+      const { sql, values } = this.buildInsert(entityType, row, auditUser);
+      queries.push({ sql, params: values });
+    }
+
+    const result = await this.dataSource.transaction(queries);
+    if (!result.success) {
+      return { success: 0, failed: rows.length, errors: [result.error || 'Transaction failed'] };
+    }
+    return { success: rows.length, failed: 0, errors: [] };
   }
 
   async delete(entityType: string, id: string): Promise<boolean> {

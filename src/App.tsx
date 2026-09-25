@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { getCurrentUser, setCurrentUser } from './lib/db';
-import { User } from './types';
+import React, { useState } from 'react';
+import { AuthProvider, useAuth, type UserRole } from './lib/auth';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { LoginScreen } from './components/LoginScreen';
@@ -41,7 +40,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 function AppContent() {
   // Violation fixed: removed getRealmDB() and db state.
   // Screens and components now access data through DashboardService / repositories.
-  const [currentUser, setUserState] = useState<User | null>(getCurrentUser());
+  const { status, user: currentUser, mode, login, logout, can, switchRole } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
@@ -56,27 +55,24 @@ function AppContent() {
     { key: 'escape', action: () => { setShowAIChat(false); setShowSwitchModal(false); }, description: 'إغلاق النوافذ' }
   ]);
 
-  // Refresh current user when auth state changes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const user = getCurrentUser();
-      if (user) setUserState(user);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
-    setUserState(user);
+  const handleLoginSuccess = async (email: string, password: string) => {
+    await login({ email, password });
     setActiveTab('dashboard');
   };
 
-  const handleSwitchUser = (user: User) => {
-    setCurrentUser(user);
-    setUserState(user);
+  const handleSwitchRole = async (role: UserRole) => {
+    await switchRole(role);
     setActiveTab('dashboard');
     setShowSwitchModal(false);
   };
+
+  if (status === 'initializing') {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center font-sans text-slate-600" dir="rtl">
+        <span className="text-sm font-semibold">جارٍ استعادة الجلسة...</span>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
@@ -95,7 +91,7 @@ function AppContent() {
       case 'parent':
         return <ParentDashboard onNavigate={setActiveTab} />;
       default:
-        return <AdminDashboard onNavigate={setActiveTab} onOpenAI={aiOpener} />;
+        return null;
     }
   };
 
@@ -147,10 +143,10 @@ function AppContent() {
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
+        mode={mode}
         unreadNotifsCount={3}
         onLogout={() => {
-          setCurrentUser(null as any);
-          setUserState(null);
+          void logout();
         }}
         onOpenNotifications={() => setActiveTab('notifications')}
         onOpenAI={() => setShowAIChat(true)}
@@ -168,6 +164,7 @@ function AppContent() {
             setSidebarOpen(false);
           }}
           userRole={currentUser.role}
+          canAccess={can}
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           isOpen={sidebarOpen}
@@ -189,7 +186,7 @@ function AppContent() {
         isOpen={showSwitchModal}
         onClose={() => setShowSwitchModal(false)}
         onUserSwitched={() => setShowSwitchModal(false)}
-        onSelectUser={handleSwitchUser}
+        onSelectRole={handleSwitchRole}
       />
     </div>
   );
@@ -197,10 +194,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <ReferenceDataProvider>
-        <AppContent />
-      </ReferenceDataProvider>
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        <ReferenceDataProvider>
+          <AppContent />
+        </ReferenceDataProvider>
+      </ToastProvider>
+    </AuthProvider>
   );
 }

@@ -4,7 +4,11 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { createAcademicRouter } from "./src/modules/academic/api/academicRoutes";
+import { createMasterDataRouter } from "./src/modules/master-data/api/masterDataRoutes";
+import { createOperationalRouter } from "./src/modules/operational/api/operationalRoutes";
+import { createAuthRouter } from "./src/core/auth/authRoutes";
 import { getSQLiteDB } from "./src/lib/sqlite-engine";
+import { DataSourceFactory } from "./src/core/datasource/DataSourceFactory";
 
 dotenv.config();
 
@@ -15,6 +19,15 @@ app.use(express.json());
 
 // Academic REST API
 app.use("/api", createAcademicRouter());
+
+// Operational Academic READ API (C3.1 — GET only, no write routes)
+app.use("/api", createOperationalRouter());
+
+// Master Data REST API (PG-5 pilot — PostgreSQL source-of-truth boundary)
+app.use("/api/master-data", createMasterDataRouter());
+
+// Authentication API (PG-6 — server-side auth over PostgreSQL)
+app.use("/api/auth", createAuthRouter());
 
 // Helper function to get Gemini client lazily
 function getAIClient() {
@@ -254,6 +267,15 @@ async function startServer() {
     await getSQLiteDB();
   } catch (err) {
     console.error("⚠️ Failed to initialize SQLite engine on server:", err);
+  }
+
+  // Initialize the application DataSource. SQLite is the default; PostgreSQL is
+  // selected when DATA_SOURCE_TYPE=postgresql. The PostgreSQL path lazy-loads
+  // `pg` and only runs in a Node/server context, so it never affects the SPA.
+  try {
+    await DataSourceFactory.initialize();
+  } catch (err) {
+    console.error("⚠️ Failed to initialize DataSource factory:", err);
   }
 
   if (process.env.NODE_ENV !== "production") {
